@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(ContentCoordinator.self) private var coordinator
     @AppStorage("darkMode") private var isDarkMode = false
+    @State private var exportError: String?
+    @State private var exportData: Data?
 
     var body: some View {
         NavigationStack {
@@ -17,12 +19,22 @@ struct SettingsView: View {
                 }
 
                 Section("Data") {
-                    if let exportData = try? JSONEncoder().encode(
-                        PersistenceService().loadInstalledApps()
-                    ) {
+                    if let exportError {
+                        Label(exportError, systemImage: "exclamationmark.triangle")
+                            .foregroundColor(.red)
+                    }
+                    if let exportData {
                         ShareLink(item: exportData, preview: .init("Installed Apps")) {
                             Label("Export App List", systemImage: "square.and.arrow.up")
                         }
+                    }
+                }
+                .task {
+                    guard exportData == nil else { return }
+                    do {
+                        exportData = try JSONEncoder().encode(PersistenceService().loadInstalledApps())
+                    } catch {
+                        exportError = "Export failed: \(error.localizedDescription)"
                     }
                 }
 
@@ -44,8 +56,8 @@ struct SettingsView: View {
     }
 
     private func rePatchKernel() {
-        guard let handle = coordinator.kernelHandle else {
-            print("[Settings] No kernel handle available")
+        guard let handle = coordinator.kernelHandle, ds_is_ready() else {
+            print("[Settings] No valid kernel handle — re-run exploit first")
             return
         }
         let kernelBase = XPFWrapper.findKernelBase()
@@ -62,8 +74,8 @@ struct SettingsView: View {
     }
 
     private func reregisterAll() async {
-        guard let handle = coordinator.kernelHandle else {
-            print("[Settings] No kernel handle available")
+        guard let handle = coordinator.kernelHandle, ds_is_ready() else {
+            print("[Settings] No valid kernel handle — re-run exploit first")
             return
         }
         let remoteCall = RemoteCallEngine(kernelHandle: handle)

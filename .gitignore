@@ -15,3 +15,5 @@ TrollStoreDarkSword.xcodeproj/
 
 # macOS
 .DS_Store
+
+Vendored/lib/*.dylib

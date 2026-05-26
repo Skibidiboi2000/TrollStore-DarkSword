@@ -3,6 +3,7 @@ import Foundation
 public final class PersistenceService: @unchecked Sendable {
     private let fileManager: FileManager
     private let appsFile: URL
+    private let lock = NSLock()
 
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -24,16 +25,20 @@ public final class PersistenceService: @unchecked Sendable {
 
     /// Add a single app to the persistent list (replaces existing entry with same bundleID).
     public func addApp(_ app: InstalledApp) {
-        var apps = loadInstalledApps()
-        apps.removeAll { $0.bundleID == app.bundleID }
-        apps.append(app)
-        saveInstalledApps(apps)
+        lock.withLock {
+            var apps = loadInstalledApps()
+            apps.removeAll { $0.bundleID == app.bundleID }
+            apps.append(app)
+            saveInstalledApps(apps)
+        }
     }
 
     /// Remove an app from the persistent list by bundle ID.
     public func removeApp(bundleID: String) {
-        var apps = loadInstalledApps()
-        apps.removeAll { $0.bundleID == bundleID }
-        saveInstalledApps(apps)
+        lock.withLock {
+            var apps = loadInstalledApps()
+            apps.removeAll { $0.bundleID == bundleID }
+            saveInstalledApps(apps)
+        }
     }
 }

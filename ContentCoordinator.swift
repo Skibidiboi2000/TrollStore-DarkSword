@@ -37,6 +37,10 @@ public final class ContentCoordinator {
             return
         }
         UserDefaults.standard.set(true, forKey: Self.panicFlagKey)
+        // Force synchronize — the exploit can panic the kernel immediately after
+        // startPipeline(), and an unsaved flag means the panic won't be detected
+        // on the next app launch.
+        UserDefaults.standard.synchronize()
         appState = .obtainingOffsets
         appendLog("Starting pipeline — resolving kernel offsets...")
         exploitViewModel.currentStage = .downloadingKernelCache
@@ -73,6 +77,10 @@ public final class ContentCoordinator {
         // and SoC family. Without this, every post-exploit C module (sbx, vfs,
         // vnode, RemoteCall) will use zero offsets and corrupt kernel memory.
         offsets_init()
+        guard offsets_are_initialized() else {
+            handleExploitFailure("Kernel offsets initialization failed — unsupported iOS version")
+            return
+        }
         appendLog("Kernel offsets initialized")
 
         let kernelBase = XPFWrapper.findKernelBase()

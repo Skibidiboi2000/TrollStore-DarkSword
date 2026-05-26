@@ -27,7 +27,6 @@ let package = Package(
                 "Core/Install/IPAParser.swift",
                 "Core/Exploit/KernelRwHandle.swift",
                 "Core/Exploit/DarkSwordExploit.swift",
-                "Core/Exploit/OIPrimitives.swift",
                 "Core/Kernel/XPFWrapper.swift",
                 "Core/Kernel/KernelPatcher.swift",
                 "Core/Kernel/SandboxEscape.swift",
@@ -49,7 +48,13 @@ let package = Package(
                 "UI/Views/AppDetailView.swift",
                 "UI/Views/InstallView.swift",
                 "UI/Views/SettingsView.swift",
-"UI/Style/AppTheme.swift"
+"UI/Style/AppTheme.swift",
+
+                // Vendored C/ObjC sources (needed for SPM builds)
+                "Vendored/kexploit",
+                "Vendored/kexploit/pe",
+                "Vendored/kexploit/TaskRop",
+                "Vendored/ChOma"
             ]
         )
     ]

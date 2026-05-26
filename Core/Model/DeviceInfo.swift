@@ -1,42 +1,32 @@
 import Foundation
-import UIKit
 
-/// Runtime device information for diagnostics and compatibility checking.
 public struct DeviceInfo: Sendable {
     public let modelIdentifier: String
     public let systemVersion: String
     public let cpuFamily: cpu_subtype_t
     public let isPACSupported: Bool
 
-    /// Whether this device meets the minimum requirements (iOS ≥ 17.0).
     public let isSupported: Bool
 
-    /// Human-readable CPU family name.
     public var cpuFamilyName: String {
         Self.cpuName(for: cpuFamily)
     }
 
-    /// Supported iOS version range displayed to the user.
     public static let supportedVersionRange = "17.0 – 26.0.x"
 
     public static let current: DeviceInfo = {
         var machine = [CChar](repeating: 0, count: 64)
         var sz = machine.count
         sysctlbyname("hw.machine", &machine, &sz, nil, 0)
-        let model = String(cString: machine)
+        let model = String(decoding: machine.prefix(while: { $0 != 0 }).map(UInt8.init), as: UTF8.self)
 
-        // UIDevice is @MainActor-isolated; use assumeIsolated when on main thread
-        let version: String
-        if Thread.isMainThread {
-            version = MainActor.assumeIsolated { UIDevice.current.systemVersion }
-        } else {
-            version = DispatchQueue.main.sync { MainActor.assumeIsolated { UIDevice.current.systemVersion } }
-        }
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let version = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
+
         let cpu = get_hw_cpufamily()
         let pac = is_pac_supported()
-        // Upper bound matches offsets_init() which calls exit() for >= 26.1
-        let supported = version.compare("17.0", options: .numeric) != .orderedAscending
-            && version.compare("26.1", options: .numeric) == .orderedAscending
+        let supported = (osVersion.majorVersion, osVersion.minorVersion) >= (17, 0)
+            && (osVersion.majorVersion, osVersion.minorVersion) < (26, 1)
 
         return DeviceInfo(
             modelIdentifier: model,

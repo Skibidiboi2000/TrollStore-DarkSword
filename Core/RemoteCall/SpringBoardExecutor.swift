@@ -119,7 +119,9 @@ public final class SpringBoardExecutor {
         }
 
         let result = remote_msg(rc, workspace, openSel, bundleStr, 0, 0, 0)
-        guard result > 0 else {
+        // openApplicationWithBundleID: returns BOOL (1 byte), but remote_msg
+        // returns the full uint64_t x0. Mask to the low byte.
+        guard (result & 0xFF) != 0 else {
             throw RemoteCallEngine.RemoteCallError.executionFailed("openApplicationWithBundleID:")
         }
 

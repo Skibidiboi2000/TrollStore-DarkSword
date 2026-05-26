@@ -85,7 +85,10 @@ public final class RemoteCallEngine: @unchecked Sendable {
         let cls = remote_getClass(rc, "NSString")
         guard cls > 0 else { throw RemoteCallError.executionFailed("remote_getClass NSString") }
         let result = remote_msg(rc, cmdStr, sel, 0, 0, 0, 0)
-        return Int(result)
+        // [NSString system] returns int (32-bit), but remote_msg returns
+        // the full uint64_t x0. Upper 32 bits are undefined for int returns
+        // per AAPCS64 — truncate to Int32 then sign-extend to Int.
+        return Int(Int32(truncatingIfNeeded: result))
     }
 }
 

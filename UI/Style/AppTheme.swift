@@ -16,11 +16,11 @@ public enum AppTheme {
 
     public static let easeOutAnimation = Animation.easeOut(duration: 0.3)
 
-    public static func haptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+    @MainActor public static func haptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
         UINotificationFeedbackGenerator().notificationOccurred(type)
     }
 
-    public static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+    @MainActor public static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 }

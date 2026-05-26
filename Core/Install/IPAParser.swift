@@ -131,9 +131,32 @@ public struct IPAParser {
 
     private static func unzipIPA(at sourceURL: URL, to destinationURL: URL) throws {
         let data = try Data(contentsOf: sourceURL)
-        let eocdOffset = try findEOCD(in: data)
-        let cdOffset = Int(try data.readUInt32(at: eocdOffset + 16))
-        let numEntries = Int(try data.readUInt16(at: eocdOffset + 10))
+        let eocd = try findEOCD(in: data)
+        var cdOffset = Int(eocd.cdOffset)
+        var numEntries = Int(eocd.numEntries)
+
+        // Handle ZIP64: read ZIP64 EOCD locator + record
+        if eocd.isZip64 {
+            // ZIP64 EOCD locator is 20 bytes before the EOCD: signature(4) + main_disk(4) +
+            // eocd64_offset(8) + total_disks(4)
+            let locatorOffset = eocd.offset - 20
+            guard locatorOffset >= 0, try data.readUInt32(at: locatorOffset) == 0x07064b50 else {
+                throw ParseError.notAnIPA
+            }
+            let eocd64Offset = Int(try data.readUInt64(at: locatorOffset + 8))
+
+            // ZIP64 EOCD record: signature(4) + size(8) + ... + numEntries(8) + ... + cdOffset(8)
+            guard try data.readUInt32(at: eocd64Offset) == 0x06064b50 else {
+                throw ParseError.notAnIPA
+            }
+            // Total number of entries on the disk containing the central directory
+            let eocd64NumEntries = try data.readUInt64(at: eocd64Offset + 32)
+            // Offset of the central directory
+            let eocd64CdOffset = try data.readUInt64(at: eocd64Offset + 48)
+
+            if eocd64NumEntries > 0 { numEntries = Int(eocd64NumEntries) }
+            if eocd64CdOffset > 0 { cdOffset = Int(eocd64CdOffset) }
+        }
 
         var pos = cdOffset
         for _ in 0..<numEntries where pos + 46 <= data.count {
@@ -149,6 +172,10 @@ public struct IPAParser {
             let fileName = try data.readString(at: pos + 46, length: fileNameLen)
             pos += 46 + fileNameLen + extraFieldLen + commentLen
 
+            // Prevent ZIP path traversal: reject filenames containing ".." components
+            guard !fileName.components(separatedBy: "/").contains("..") else {
+                throw ParseError.notAnIPA
+            }
             let destPath = destinationURL.appendingPathComponent(fileName)
             if fileName.hasSuffix("/") {
                 try FileManager.default.createDirectory(at: destPath, withIntermediateDirectories: true)
@@ -164,12 +191,20 @@ public struct IPAParser {
         }
     }
 
-    private static func findEOCD(in data: Data) throws -> Int {
+    private static func findEOCD(in data: Data) throws -> (offset: Int, cdOffset: UInt32, numEntries: UInt16, isZip64: Bool) {
         let searchLen = min(data.count, 65557)
         let start = data.count - searchLen
         for i in 0..<searchLen - 3 {
             if try data.readUInt32(at: start + i) == 0x06054b50 {
-                return start + i
+                // Read EOCD fields
+                let cdOffset = try data.readUInt32(at: start + i + 16)
+                let numEntries = try data.readUInt16(at: start + i + 10)
+                let cdTotalEntries = try data.readUInt16(at: start + i + 8)
+                // ZIP64: if cdOffset == 0xFFFFFFFF or numEntries == 0xFFFF or the
+                // EOCD is not at the very end (ZIP64 EOCD locator should precede it)
+                let isZip64 = cdOffset == 0xFFFFFFFF || numEntries == 0xFFFF
+                    || cdTotalEntries == 0xFFFF
+                return (start + i, cdOffset, numEntries, isZip64)
             }
         }
         throw ParseError.notAnIPA
@@ -215,6 +250,13 @@ public struct IPAParser {
 }
 
 private extension Data {
+    func readUInt64(at offset: Int) throws -> UInt64 {
+        guard offset + 8 <= count else { throw IPAParser.ParseError.notAnIPA }
+        let lo = UInt64(try readUInt32(at: offset))
+        let hi = UInt64(try readUInt32(at: offset + 4))
+        return lo | (hi << 32)
+    }
+
     func readUInt32(at offset: Int) throws -> UInt32 {
         guard offset + 4 <= count else { throw IPAParser.ParseError.notAnIPA }
         return UInt32(self[offset]) | (UInt32(self[offset + 1]) << 8) |

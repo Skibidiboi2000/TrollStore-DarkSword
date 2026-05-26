@@ -62,3 +62,6 @@ targets:
           mkdir -p "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}"
           cp -f "${SRCROOT}/Vendored/lib/libxpf.dylib" "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/"
           cp -f "${SRCROOT}/Vendored/lib/libgrabkernel2.dylib" "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libxpf.dylib"
+          - "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libgrabkernel2.dylib"

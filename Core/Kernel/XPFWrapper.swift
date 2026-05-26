@@ -28,7 +28,13 @@ public enum XPFWrapper {
         guard let kcPath = obtainKernelCache() else { initLock.unlock(); return false }
         let result = xpf_start_with_kernel_path((kcPath as NSString).utf8String)
         guard result == 0 else {
-            print("[XPF] xpf_start failed: \(String(cString: xpf_get_error()))")
+            let errMsg: String
+            if let errPtr = xpf_get_error() {
+                errMsg = String(cString: errPtr)
+            } else {
+                errMsg = "unknown error (xpf_get_error returned NULL)"
+            }
+            print("[XPF] xpf_start failed: \(errMsg)")
             initLock.unlock()
             return false
         }
@@ -68,10 +74,19 @@ public enum XPFWrapper {
     /// Find AMFIIsCDHashInTrustCache address using XPF.
     public static func findAMFIPatchOffset() -> UInt64? {
         guard ensureInitialized() else { return nil }
-        if let addr = resolveSymbol("AMFI") ?? resolveSymbol("AMFIIsCDHashInTrustCache") {
-            return addr
+        let symbols = [
+            "AMFI",
+            "AMFIIsCDHashInTrustCache",
+            "_AMFIIsCDHashInTrustCache",
+            "AMFITrustCache",
+            "AMFI:TrustCache",
+        ]
+        for name in symbols {
+            if let addr = resolveSymbol(name) {
+                print("[XPF] AMFI symbol resolved via \(name) at 0x\(String(addr, radix: 16))")
+                return addr
+            }
         }
-        // Fallback: scan via kernel R/W for AMFI function prologue
         return nil
     }
 
