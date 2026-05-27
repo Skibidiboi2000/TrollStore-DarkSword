@@ -23,3 +23,6 @@
 
 // ChOma code signing
 #import "choma_helpers.h"
+
+// ChOma trust cache injection
+#import "choma_trustcache.h"

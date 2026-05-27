@@ -17,3 +17,6 @@ TrollStoreDarkSword.xcodeproj/
 .DS_Store
 
 Vendored/lib/*.dylib
+
+# Runtime logs
+logs/

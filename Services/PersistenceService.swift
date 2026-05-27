@@ -14,7 +14,12 @@ public final class PersistenceService: @unchecked Sendable {
     /// Load the list of installed apps from persistent storage.
     public func loadInstalledApps() -> [InstalledApp] {
         guard let data = try? Data(contentsOf: appsFile) else { return [] }
-        return (try? JSONDecoder().decode([InstalledApp].self, from: data)) ?? []
+        do {
+            return try JSONDecoder().decode([InstalledApp].self, from: data)
+        } catch {
+            LogManager.shared.append("Failed to decode installed apps: \(error.localizedDescription)", tag: "Persistence")
+            return []
+        }
     }
 
     /// Save the complete list of installed apps to persistent storage.

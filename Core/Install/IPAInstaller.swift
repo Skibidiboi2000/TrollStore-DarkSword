@@ -89,7 +89,7 @@ public final class IPAInstaller: @unchecked Sendable {
 
                     persistence.addApp(app)
 
-                    print("[IPAInstaller] Installed \(parsed.name) v\(parsed.version)")
+                    LogManager.shared.append("Installed \(parsed.name) v\(parsed.version)", tag: "IPAInstaller")
                     continuation.yield(.complete(app))
                     continuation.finish()
                 } catch {
@@ -108,6 +108,6 @@ public final class IPAInstaller: @unchecked Sendable {
     public func uninstall(bundleID: String) async throws {
         try await springBoard.uninstallAppBundle(bundleID: bundleID)
         persistence.removeApp(bundleID: bundleID)
-        print("[IPAInstaller] Uninstalled \(bundleID)")
+        LogManager.shared.append("Uninstalled \(bundleID)", tag: "IPAInstaller")
     }
 }

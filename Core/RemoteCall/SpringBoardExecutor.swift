@@ -38,63 +38,64 @@ public final class SpringBoardExecutor {
         "'\(string.replacingOccurrences(of: "'", with: "'\''"))'"
     }
 
-    /// Copy an app bundle to /Applications/ using SpringBoard's privileges.
-    @discardableResult
-    public func installAppBundle(sourcePath: String, bundleID: String) async throws -> Bool {
+    /// Validate bundleID and ensure SpringBoard is running.
+    /// Used by every operation to fail fast with a clear error.
+    private func validatedPID(bundleID: String) throws -> pid_t {
         guard Self.isValidBundleID(bundleID) else {
             throw RemoteCallEngine.RemoteCallError.executionFailed("Invalid bundle ID: \(bundleID)")
         }
         guard let pid = springBoardPID else {
             throw RemoteCallEngine.RemoteCallError.targetNotFound("SpringBoard (pid: 0)")
         }
+        return pid
+    }
 
+    /// Copy an app bundle to /Applications/ using SpringBoard's privileges.
+    @discardableResult
+    public func installAppBundle(sourcePath: String, bundleID: String) async throws -> Bool {
+        let pid = try validatedPID(bundleID: bundleID)
         let destPath = "/Applications/\(bundleID).app"
         let command = "cp -R \(Self.shellEscape(sourcePath)) \(Self.shellEscape(destPath)) && chmod -R 755 \(Self.shellEscape(destPath))"
 
-        _ = try await remoteCall.execute(inProcess: pid, command: command)
-        print("[SpringBoardExecutor] Bundle copied to \(destPath)")
+        let exitCode = try await remoteCall.execute(inProcess: pid, command: command)
+        guard Int(exitCode) == 0 else {
+            throw RemoteCallEngine.RemoteCallError.executionFailed("cp to \(destPath) returned exit code \(exitCode)")
+        }
+        LogManager.shared.append("Bundle copied to \(destPath)", tag: "SpringBoard")
         return true
     }
 
     /// Run uicache to register the app with LaunchServices.
     @discardableResult
     public func registerApp(bundleID: String) async throws -> Bool {
-        guard Self.isValidBundleID(bundleID) else {
-            throw RemoteCallEngine.RemoteCallError.executionFailed("Invalid bundle ID: \(bundleID)")
-        }
-        guard let pid = springBoardPID else {
-            throw RemoteCallEngine.RemoteCallError.targetNotFound("SpringBoard (pid: 0)")
-        }
-
+        let pid = try validatedPID(bundleID: bundleID)
         let command = "/usr/bin/uicache -r -b \(Self.shellEscape(bundleID))"
-        _ = try await remoteCall.execute(inProcess: pid, command: command)
-        print("[SpringBoardExecutor] uicache registered \(bundleID)")
+        let exitCode = try await remoteCall.execute(inProcess: pid, command: command)
+        guard Int(exitCode) == 0 else {
+            throw RemoteCallEngine.RemoteCallError.executionFailed("uicache -r -b \(bundleID) returned exit code \(exitCode)")
+        }
+        LogManager.shared.append("uicache registered \(bundleID)", tag: "SpringBoard")
         return true
     }
 
     /// Remove an app bundle from /Applications/ and de-register.
     @discardableResult
     public func uninstallAppBundle(bundleID: String) async throws -> Bool {
-        guard Self.isValidBundleID(bundleID) else {
-            throw RemoteCallEngine.RemoteCallError.executionFailed("Invalid bundle ID: \(bundleID)")
-        }
-        guard let pid = springBoardPID else {
-            throw RemoteCallEngine.RemoteCallError.targetNotFound("SpringBoard (pid: 0)")
-        }
-
+        let pid = try validatedPID(bundleID: bundleID)
         let path = "/Applications/\(bundleID).app"
         let command = "rm -rf \(Self.shellEscape(path)) && /usr/bin/uicache -r -b \(Self.shellEscape(bundleID))"
-        _ = try await remoteCall.execute(inProcess: pid, command: command)
-        print("[SpringBoardExecutor] Removed \(path)")
+        let exitCode = try await remoteCall.execute(inProcess: pid, command: command)
+        guard Int(exitCode) == 0 else {
+            throw RemoteCallEngine.RemoteCallError.executionFailed("rm -rf \(path) returned exit code \(exitCode)")
+        }
+        LogManager.shared.append("Removed \(path)", tag: "SpringBoard")
         return true
     }
 
     /// Launch an installed app via LSApplicationWorkspace in SpringBoard.
     /// Uses the same RemoteCall / Mach exception hijack path as install/uninstall.
     public func launchApp(bundleID: String) async throws {
-        guard Self.isValidBundleID(bundleID) else {
-            throw RemoteCallEngine.RemoteCallError.executionFailed("Invalid bundle ID: \(bundleID)")
-        }
+        _ = try validatedPID(bundleID: bundleID)
         let rc = try connect()
 
         let lsCls = remote_getClass(rc, "LSApplicationWorkspace")
@@ -125,6 +126,6 @@ public final class SpringBoardExecutor {
             throw RemoteCallEngine.RemoteCallError.executionFailed("openApplicationWithBundleID:")
         }
 
-        print("[SpringBoardExecutor] Launched \(bundleID)")
+        LogManager.shared.append("Launched \(bundleID)", tag: "SpringBoard")
     }
 }

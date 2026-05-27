@@ -26,7 +26,7 @@ public enum VirtualFileSystem {
         let ok = vfs_init() == 0 && vfs_isready()
         isInitialized = ok
         if !ok {
-            print("[VFS] vfs_init failed or not ready — C shims may not be linked")
+            LogManager.shared.append("vfs_init failed or not ready — C shims may not be linked", tag: "VFS")
         }
         return ok
     }
@@ -49,7 +49,11 @@ public enum VirtualFileSystem {
         guard !data.isEmpty else { return false }
         return data.withUnsafeBytes { ptr in
             guard let base = ptr.baseAddress else { return false }
-            return vfs_write(path, base, data.count, offset) == data.count
+            let wrote = vfs_write(path, base, data.count, offset)
+            if wrote != data.count {
+                LogManager.shared.append("vfs_write for \(path) returned \(wrote) (expected \(data.count)) — backend stub not implemented", tag: "VFS")
+            }
+            return wrote == data.count
         }
     }
 

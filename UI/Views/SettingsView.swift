@@ -57,41 +57,41 @@ struct SettingsView: View {
 
     private func rePatchKernel() {
         guard let handle = coordinator.kernelHandle, ds_is_ready() else {
-            print("[Settings] No valid kernel handle — re-run exploit first")
+            LogManager.shared.append("No valid kernel handle — re-run exploit first", tag: "Settings")
             return
         }
         let kernelBase = XPFWrapper.findKernelBase()
         guard kernelBase > 0 else {
-            print("[Settings] Kernel base resolution failed — cannot re-patch")
+            LogManager.shared.append("Kernel base resolution failed — cannot re-patch", tag: "Settings")
             return
         }
         let patcher = KernelPatcher(handle: handle, kernelBase: kernelBase)
         if patcher.applyAll() {
-            print("[Settings] Kernel re-patched ✓")
+            LogManager.shared.append("Kernel re-patched ✓", tag: "Settings")
         } else {
-            print("[Settings] Kernel re-patch failed")
+            LogManager.shared.append("Kernel re-patch failed", tag: "Settings")
         }
     }
 
     private func reregisterAll() async {
         guard let handle = coordinator.kernelHandle, ds_is_ready() else {
-            print("[Settings] No valid kernel handle — re-run exploit first")
+            LogManager.shared.append("No valid kernel handle — re-run exploit first", tag: "Settings")
             return
         }
         let remoteCall = RemoteCallEngine(kernelHandle: handle)
         let springBoard = SpringBoardExecutor(remoteCall: remoteCall)
         let persistence = PersistenceService()
         let apps = persistence.loadInstalledApps()
-        print("[Settings] Re-registering \(apps.count) apps via uicache -r")
+        LogManager.shared.append("Re-registering \(apps.count) apps via uicache -r", tag: "Settings")
         guard let pid = springBoard.springBoardPID else {
-            print("[Settings] SpringBoard not found — cannot re-register")
+            LogManager.shared.append("SpringBoard not found — cannot re-register", tag: "Settings")
             return
         }
         _ = try? await remoteCall.execute(
             inProcess: pid,
             command: "/usr/bin/uicache -r"
         )
-        print("[Settings] Re-registration complete")
+        LogManager.shared.append("Re-registration complete", tag: "Settings")
     }
 
 }
@@ -102,10 +102,11 @@ struct ExploitLogView: View {
     var body: some View {
         ScrollView {
             if coordinator.exploitLog.isEmpty {
-                Text("No exploit log entries yet.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding()
+                ContentUnavailableView(
+                    "No Log Entries",
+                    systemImage: "doc.text",
+                    description: Text("Run the exploit to generate log entries.")
+                )
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(coordinator.exploitLog.enumerated()), id: \.offset) { _, entry in
@@ -120,6 +121,13 @@ struct ExploitLogView: View {
             }
         }
         .navigationTitle("Exploit Log")
+        .toolbar {
+            if let logURL = LogManager.shared.currentLogURL {
+                ShareLink(item: logURL, preview: SharePreview("Exploit Log")) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
     }
 }
 

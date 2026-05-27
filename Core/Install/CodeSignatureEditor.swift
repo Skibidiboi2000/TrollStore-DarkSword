@@ -35,7 +35,7 @@ public final class CodeSignatureEditor: @unchecked Sendable {
     public func injectEntitlements(into machOPath: String) throws {
         let entitlementsXML = Self.fullEntitlementsXML()
         try choMA.applyEntitlements(to: machOPath, xml: entitlementsXML)
-        print("[CodeSignatureEditor] Entitlements injected into \(machOPath)")
+        LogManager.shared.append("Entitlements injected into \(machOPath)", tag: "CodeSign")
     }
 
     /// Full entitlement set granting unsandboxed access to installed apps.

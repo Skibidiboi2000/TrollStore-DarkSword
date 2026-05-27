@@ -31,7 +31,7 @@ public final class AppListViewModel {
             persistence.removeApp(bundleID: app.bundleID)
             refresh()
         } catch {
-            print("[AppList] Uninstall failed: \(error)")
+            LogManager.shared.append("Uninstall failed: \(error)", tag: "AppList")
         }
     }
 }

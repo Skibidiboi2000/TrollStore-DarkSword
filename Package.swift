@@ -1,4 +1,13 @@
 // swift-tools-version: 5.9
+//
+// NOTE: This project requires xcodegen + Xcode to build.
+// `swift build` will NOT work because:
+//   - The vendored prebuilt dylibs (libxpf, libgrabkernel2) cannot be linked
+//   - The C/ObjC bridging header is not configured for SPM
+//   - Linker flags (-lxpf, -lgrabkernel2, -lz) are set in project.yml, not here
+//
+// Build: xcodegen generate && xcodebuild -project TrollStoreDarkSword.xcodeproj -scheme TrollStoreDarkSword
+//
 import PackageDescription
 
 let package = Package(
@@ -38,6 +47,7 @@ let package = Package(
                 "Core/Kernel/VirtualFileSystem.swift",
 
                 "Services/PersistenceService.swift",
+                "Services/LogManager.swift",
                 "UI/Views/ExploitView.swift",
                 "UI/Views/ExploitProgressView.swift",
                 "UI/ViewModels/ExploitViewModel.swift",

@@ -61,7 +61,11 @@ struct InstallView: View {
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
-                Task { await viewModel?.installIPA(at: url) }
+                let didAccess = url.startAccessingSecurityScopedResource()
+                Task {
+                    await viewModel?.installIPA(at: url)
+                    if didAccess { url.stopAccessingSecurityScopedResource() }
+                }
             case .failure(let error):
                 viewModel?.status = .failed(error.localizedDescription)
             }
@@ -69,7 +73,7 @@ struct InstallView: View {
         .onAppear {
             guard viewModel == nil else { return }
             guard let handle = coordinator.kernelHandle else {
-                print("[InstallView] Deferred: no kernel handle yet")
+                LogManager.shared.append("Deferred: no kernel handle yet", tag: "InstallView")
                 return
             }
             let persistence = PersistenceService()

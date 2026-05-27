@@ -54,6 +54,7 @@ targets:
           - "-L$(SRCROOT)/Vendored/lib"
           - "-lxpf"
           - "-lgrabkernel2"
+          - "-lz"
         OTHER_CFLAGS:
           - "-Wno-deprecated-declarations"
     postBuildScripts:

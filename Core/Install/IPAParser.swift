@@ -102,16 +102,66 @@ public struct IPAParser {
 
         // Find icons from Info.plist
         var iconPaths: [String] = []
-        if let iconFiles = infoPlist["CFBundleIcons"] as? [String: Any],
-           let primaryIcon = iconFiles["CFBundlePrimaryIcon"] as? [String: Any],
+        // Helper to check each icon name against common extensions
+        func findIconFile(named baseName: String, in bundle: URL) -> String? {
+            let iconURL = bundle.appendingPathComponent(baseName)
+            for ext in ["png", "PNG", "jpg", "jpeg", "JPG", "JPEG", "PNG", "ico"] {
+                let urlWithExt = iconURL.appendingPathExtension(ext)
+                if fileManager.fileExists(atPath: urlWithExt.path) {
+                    return urlWithExt.path
+                }
+            }
+            // Some icons have no extension (already include it)
+            if fileManager.fileExists(atPath: iconURL.path) {
+                return iconURL.path
+            }
+            return nil
+        }
+        // Strategy 1: CFBundleIcons > CFBundlePrimaryIcon > CFBundleIconFiles (nested)
+        if let iconDict = infoPlist["CFBundleIcons"] as? [String: Any],
+           let primaryIcon = iconDict["CFBundlePrimaryIcon"] as? [String: Any],
            let iconNames = primaryIcon["CFBundleIconFiles"] as? [String] {
-            for iconName in iconNames {
-                let iconURL = appBundle.appendingPathComponent(iconName)
-                for ext in ["png", "PNG", "jpg", "jpeg", "JPG", "JPEG"] {
-                    let urlWithExt = iconURL.appendingPathExtension(ext)
-                    if fileManager.fileExists(atPath: urlWithExt.path) {
-                        iconPaths.append(urlWithExt.path)
-                        break
+            for name in iconNames {
+                if let found = findIconFile(named: name, in: appBundle) {
+                    iconPaths.append(found)
+                }
+            }
+        }
+        // Strategy 2: Top-level CFBundleIconFiles (used by many apps)
+        if iconPaths.isEmpty, let iconNames = infoPlist["CFBundleIconFiles"] as? [String] {
+            for name in iconNames {
+                if let found = findIconFile(named: name, in: appBundle) {
+                    iconPaths.append(found)
+                }
+            }
+        }
+        // Strategy 3: iPad-specific CFBundleIcons~ipad
+        if iconPaths.isEmpty, let iconDict = infoPlist["CFBundleIcons~ipad"] as? [String: Any],
+           let primaryIcon = iconDict["CFBundlePrimaryIcon"] as? [String: Any],
+           let iconNames = primaryIcon["CFBundleIconFiles"] as? [String] {
+            for name in iconNames {
+                if let found = findIconFile(named: name, in: appBundle) {
+                    iconPaths.append(found)
+                }
+            }
+        }
+        // Strategy 4: CFBundleIconName with asset catalog — scan for common patterns
+        if iconPaths.isEmpty, let iconName = infoPlist["CFBundleIconName"] as? String {
+            // Asset catalog based icons; try common naming patterns
+            for candidate in [iconName, "AppIcon", "AppIcon-\(iconName)", "icon", "Icon"] {
+                if let found = findIconFile(named: candidate, in: appBundle) {
+                    iconPaths.append(found)
+                }
+            }
+            // Also scan the bundle root for any file matching *icon* or *Icon*.png
+            if iconPaths.isEmpty, let allFiles = try? fileManager.contentsOfDirectory(at: appBundle, includingPropertiesForKeys: nil) {
+                let iconKeywords = ["icon", "Icon", "appicon", "AppIcon"]
+                for file in allFiles {
+                    let name = file.lastPathComponent
+                    if iconKeywords.contains(where: { name.contains($0) }) &&
+                       ["png", "jpg", "jpeg"].contains(file.pathExtension.lowercased()) {
+                        iconPaths.append(file.path)
+                        if iconPaths.count >= 2 { break }
                     }
                 }
             }

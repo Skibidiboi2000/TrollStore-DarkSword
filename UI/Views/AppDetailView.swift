@@ -68,9 +68,9 @@ struct AppDetailView: View {
         Task {
             do {
                 try await springBoard.launchApp(bundleID: app.bundleID)
-                print("[AppDetail] Launched \(app.bundleID) ✓")
+                LogManager.shared.append("Launched \(app.bundleID) ✓", tag: "AppDetail")
             } catch {
-                print("[AppDetail] Launch failed: \(error)")
+                LogManager.shared.append("Launch failed: \(error)", tag: "AppDetail")
             }
         }
     }
@@ -85,10 +85,10 @@ struct AppDetailView: View {
             do {
                 try await springBoard.uninstallAppBundle(bundleID: app.bundleID)
                 persistence.removeApp(bundleID: app.bundleID)
-                print("[AppDetail] Uninstalled \(app.bundleID) ✓")
+                LogManager.shared.append("Uninstalled \(app.bundleID) ✓", tag: "AppDetail")
                 await MainActor.run { dismiss() }
             } catch {
-                print("[AppDetail] Uninstall failed: \(error)")
+                LogManager.shared.append("Uninstall failed: \(error)", tag: "AppDetail")
             }
         }
     }

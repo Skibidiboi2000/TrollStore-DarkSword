@@ -28,10 +28,11 @@ public final class ContentCoordinator {
 
     public func appendLog(_ message: String) {
         exploitLog.append(message)
-        print("[TrollStore] \(message)")
+        LogManager.shared.append(message, tag: "Pipeline")
     }
 
     public func startPipeline() {
+        LogManager.shared.startNewSession()
         guard deviceInfo.isSupported else {
             handleExploitFailure("Device unsupported: \(deviceInfo.modelIdentifier) on iOS \(deviceInfo.systemVersion)")
             return
@@ -42,6 +43,7 @@ public final class ContentCoordinator {
         // on the next app launch.
         UserDefaults.standard.synchronize()
         appState = .obtainingOffsets
+        exploitLog.removeAll()
         appendLog("Starting pipeline — resolving kernel offsets...")
         exploitViewModel.currentStage = .downloadingKernelCache
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -71,30 +73,56 @@ public final class ContentCoordinator {
     public func handleExploitSuccess(with handle: KernelRwHandle) {
         UserDefaults.standard.set(false, forKey: Self.panicFlagKey)
         kernelHandle = handle
-        appendLog("Kernel r/w established — initializing offsets...")
+        appendLog("Kernel r/w established — resolving kernel base...")
 
-        // Initialize all kernel structure offsets for the current iOS version
-        // and SoC family. Without this, every post-exploit C module (sbx, vfs,
-        // vnode, RemoteCall) will use zero offsets and corrupt kernel memory.
-        offsets_init()
-        guard offsets_are_initialized() else {
-            handleExploitFailure("Kernel offsets initialization failed — unsupported iOS version")
-            return
-        }
-        appendLog("Kernel offsets initialized")
-
+        // Step 1: Resolve kernel base via XPF (BEFORE offsets_init, which
+        // destroys XPF). Both applyAll() and findKernelBase() need gXPF alive.
+        print("[D] handleExploitSuccess: calling findKernelBase...")
         let kernelBase = XPFWrapper.findKernelBase()
+        print("[D] findKernelBase returned 0x\(String(kernelBase, radix: 16))")
         guard kernelBase > 0 else {
             handleExploitFailure("Kernel base resolution failed — cannot patch")
             return
         }
+
+        // Step 2: Apply kernel patches (trust cache injection, developer mode).
+        // These use XPF for symbol resolution and the kernel r/w handle.
+        appendLog("Kernel base resolved — applying patches...")
         let patcher = KernelPatcher(handle: handle, kernelBase: kernelBase)
+        print("[D] handleExploitSuccess: calling patcher.applyAll...")
         guard patcher.applyAll() else {
-            handleExploitFailure("AMFI patch failed")
+            appendLog("mac_proc_enforce patch failed")
+            print("[D] patcher.applyAll returned false")
+            handleExploitFailure("mac_proc_enforce disable failed")
             return
         }
+        print("[D] patcher.applyAll SUCCEEDED")
 
-        guard let escape = SandboxEscape(handle: handle, kernelBase: kernelBase) else {
+        // Step 3: Initialize kernel structure offsets for post-exploit C modules
+        // (sbx, vfs, vnode, RemoteCall). offsets_init calls xpf_stop() internally,
+        // destroying gXPF, but we no longer need XPF after this point.
+        appendLog("Patches applied — initializing post-exploit offsets...")
+        offsets_init()
+        // offsets_init calls xpf_stop() internally, destroying gXPF.
+        XPFWrapper.resetXPF()
+        guard offsets_are_initialized() else {
+            handleExploitFailure("Kernel offsets initialization failed — unsupported iOS version")
+            return
+        }
+        appendLog("Post-exploit offsets initialized")
+
+        // Read kernproc address from UserDefaults (cached by offsets_init -> offsets.m)
+        let kernprocAddr: UInt64
+        if let savedOff = UserDefaults.standard.object(forKey: "lara.kernprocoff") as? UInt64, savedOff > 0 {
+            kernprocAddr = kernelBase + savedOff
+            appendLog("kernproc via cache at 0x\(String(kernprocAddr, radix: 16))")
+        } else {
+            kernprocAddr = 0
+            appendLog("kernproc not cached by offsets_init")
+        }
+
+        // Step 4: Sandbox escape (needs offsets from step 3)
+        guard let escape = SandboxEscape(handle: handle, kernelBase: kernelBase, kernprocAddr: kernprocAddr) else {
             handleExploitFailure("SandboxEscape init failed")
             return
         }
@@ -103,6 +131,7 @@ public final class ContentCoordinator {
             return
         }
 
+        // Step 5: VFS init (needs offsets from step 3)
         guard VirtualFileSystem.initialize() else {
             handleExploitFailure("VFS init failed")
             return

@@ -21,6 +21,13 @@ public final class RemoteCallEngine: @unchecked Sendable {
         // kernelHandle stored for future use by vendored C primitives
     }
 
+    /// Read process name from a kinfo_proc struct.
+    private static func processName(from proc: kinfo_proc) -> String {
+        withUnsafePointer(to: proc.kp_proc.p_comm) { ptr in
+            String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
+        }
+    }
+
     public func findProcess(named name: String) -> pid_t? {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL]
         var size: size_t = 0
@@ -29,9 +36,7 @@ public final class RemoteCallEngine: @unchecked Sendable {
         var procArray = [kinfo_proc](repeating: kinfo_proc(), count: count)
         guard sysctl(&mib, UInt32(mib.count), &procArray, &size, nil, 0) == 0 else { return nil }
         for proc in procArray {
-            let procName = withUnsafePointer(to: proc.kp_proc.p_comm) { ptr in
-                String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
-            }
+            let procName = Self.processName(from: proc)
             if procName == name { return proc.kp_proc.p_pid }
         }
         return nil
@@ -43,9 +48,7 @@ public final class RemoteCallEngine: @unchecked Sendable {
         var size: size_t = MemoryLayout<kinfo_proc>.stride
         var proc = kinfo_proc()
         guard sysctl(&mib, 4, &proc, &size, nil, 0) == 0, size > 0 else { return nil }
-        return withUnsafePointer(to: proc.kp_proc.p_comm) { ptr in
-            String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
-        }
+        return Self.processName(from: proc)
     }
 
     public func connectToProcess(named name: String) throws -> RemoteCall {
