@@ -62,7 +62,8 @@ public struct IPAParser {
         let tempDir = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
 
-        // Unzip IPA — caller (IPAInstaller) cleans up via ParsedApp.tempDirectory
+        // Unzip IPA — caller (IPAInstaller) cleans up via ParsedApp.tempDirectory.
+        // Do NOT defer-cleanup here; parsed.executablePath/bundlePath point into tempDir.
         try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
         try Self.unzipIPA(at: ipaURL, to: tempDir)
 
@@ -223,7 +224,9 @@ public struct IPAParser {
             pos += 46 + fileNameLen + extraFieldLen + commentLen
 
             // Prevent ZIP path traversal: reject filenames containing ".." components
-            guard !fileName.components(separatedBy: "/").contains("..") else {
+            // or starting with "/" (absolute paths that would escape the temp directory).
+            guard !fileName.components(separatedBy: "/").contains(".."),
+                  !fileName.hasPrefix("/") else {
                 throw ParseError.notAnIPA
             }
             let destPath = destinationURL.appendingPathComponent(fileName)

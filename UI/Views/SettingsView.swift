@@ -1,33 +1,88 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(ContentCoordinator.self) private var coordinator
+    @EnvironmentObject private var coordinator: ContentCoordinator
     @AppStorage("darkMode") private var isDarkMode = false
     @State private var exportError: String?
     @State private var exportData: Data?
+    @State private var confirmUninstallAll = false
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Kernel") {
-                    Button(action: { rePatchKernel() }) {
-                        Label("Re-patch Kernel", systemImage: "bolt.shield.fill")
+                // MARK: - Kernel
+                Section {
+                    Button(action: rePatchKernel) {
+                        Label {
+                            Text("Re-patch Kernel")
+                        } icon: {
+                            settingsIcon(systemName: "bolt.shield.fill", color: .blue)
+                        }
                     }
+
                     Button(action: { Task { await reregisterAll() } }) {
-                        Label("Re-register All Apps", systemImage: "arrow.triangle.2.circlepath")
+                        Label {
+                            Text("Re-register All Apps")
+                        } icon: {
+                            settingsIcon(systemName: "arrow.triangle.2.circlepath", color: .purple)
+                        }
                     }
+
+                    Button(action: { Task { await rescanApps() } }) {
+                        Label {
+                            Text("Rescan Installed Apps")
+                        } icon: {
+                            settingsIcon(systemName: "magnifyingglass.circle", color: .blue)
+                        }
+                    }
+                } header: {
+                    Text("Kernel")
                 }
 
-                Section("Data") {
+                // MARK: - General
+                Section {
+                    HStack {
+                        Label {
+                            Text("Dark Mode")
+                        } icon: {
+                            settingsIcon(systemName: "moon.fill", color: .purple)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $isDarkMode)
+                            .labelsHidden()
+                    }
+
+                    HStack {
+                        Label {
+                            Text("Persist Installation")
+                        } icon: {
+                            settingsIcon(systemName: "square.and.arrow.down", color: .orange)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $coordinator.persistInstallation)
+                            .labelsHidden()
+                    }
+                } header: {
+                    Text("General")
+                }
+
+                // MARK: - Data
+                Section {
                     if let exportError {
                         Label(exportError, systemImage: "exclamationmark.triangle")
                             .foregroundColor(.red)
                     }
                     if let exportData {
                         ShareLink(item: exportData, preview: .init("Installed Apps")) {
-                            Label("Export App List", systemImage: "square.and.arrow.up")
+                            Label {
+                                Text("Export App List")
+                            } icon: {
+                                settingsIcon(systemName: "square.and.arrow.up", color: .green)
+                            }
                         }
                     }
+                } header: {
+                    Text("Data")
                 }
                 .task {
                     guard exportData == nil else { return }
@@ -38,22 +93,60 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Diagnostics") {
+                // MARK: - Diagnostics
+                Section {
                     NavigationLink(destination: ExploitLogView()) {
-                        Label("Exploit Log", systemImage: "list.bullet.rectangle")
+                        Label {
+                            Text("Exploit Log")
+                        } icon: {
+                            settingsIcon(systemName: "list.bullet.rectangle", color: .gray)
+                        }
                     }
+
                     NavigationLink(destination: AboutView()) {
-                        Label("About", systemImage: "info.circle")
+                        Label {
+                            Text("About")
+                        } icon: {
+                            settingsIcon(systemName: "info.circle", color: .blue)
+                        }
                     }
+                } header: {
+                    Text("Diagnostics")
                 }
 
-                Section("Debug") {
-                    Toggle("Dark Mode", isOn: $isDarkMode)
+                // MARK: - Danger Zone
+                Section {
+                    Button(role: .destructive, action: { confirmUninstallAll = true }) {
+                        Label("Uninstall All Apps", systemImage: "trash")
+                    }
+                } header: {
+                    Text("Danger Zone")
                 }
             }
             .navigationTitle("Settings")
         }
+        .alert("Uninstall All Apps?", isPresented: $confirmUninstallAll) {
+            Button("Cancel", role: .cancel) {}
+            Button("Uninstall All", role: .destructive) {
+                Task { await uninstallAll() }
+            }
+        } message: {
+            Text("This will remove ALL installed apps and their data. This action cannot be undone.")
+        }
     }
+
+    private func settingsIcon(systemName: String, color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 7)
+            .fill(color)
+            .frame(width: 28, height: 28)
+            .overlay(
+                Image(systemName: systemName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            )
+    }
+
+    // MARK: - Actions
 
     private func rePatchKernel() {
         guard let handle = coordinator.kernelHandle, ds_is_ready() else {
@@ -87,17 +180,45 @@ struct SettingsView: View {
             LogManager.shared.append("SpringBoard not found — cannot re-register", tag: "Settings")
             return
         }
-        _ = try? await remoteCall.execute(
-            inProcess: pid,
-            command: "/usr/bin/uicache -r"
-        )
+        _ = try? await remoteCall.execute(inProcess: pid, command: "/usr/bin/uicache -r")
         LogManager.shared.append("Re-registration complete", tag: "Settings")
     }
 
+    private func rescanApps() async {
+        let count = PersistenceService().rescanApplicationsDirectory().count
+        LogManager.shared.append("Rescanned /Applications/ — \(count) apps tracked", tag: "Settings")
+    }
+
+    private func uninstallAll() async {
+        guard let handle = coordinator.kernelHandle, ds_is_ready() else {
+            LogManager.shared.append("No valid kernel handle — re-run exploit first", tag: "Settings")
+            return
+        }
+        let persistence = PersistenceService()
+        let apps = persistence.loadInstalledApps()
+        guard !apps.isEmpty else {
+            LogManager.shared.append("No apps to uninstall", tag: "Settings")
+            return
+        }
+        let remoteCall = RemoteCallEngine(kernelHandle: handle)
+        let springBoard = SpringBoardExecutor(remoteCall: remoteCall)
+        for app in apps {
+            do {
+                try await springBoard.uninstallAppBundle(bundleID: app.bundleID)
+                persistence.removeApp(bundleID: app.bundleID)
+                LogManager.shared.append("Uninstalled \(app.bundleID)", tag: "Settings")
+            } catch {
+                LogManager.shared.append("Uninstall failed for \(app.bundleID): \(error)", tag: "Settings")
+            }
+        }
+        LogManager.shared.append("Uninstall all complete", tag: "Settings")
+    }
 }
 
+// MARK: - Exploit Log View
+
 struct ExploitLogView: View {
-    @Environment(ContentCoordinator.self) private var coordinator
+    @EnvironmentObject private var coordinator: ContentCoordinator
 
     var body: some View {
         ScrollView {
@@ -130,6 +251,8 @@ struct ExploitLogView: View {
         }
     }
 }
+
+// MARK: - About View
 
 struct AboutView: View {
     private let device = DeviceInfo.current

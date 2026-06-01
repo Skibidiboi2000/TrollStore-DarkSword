@@ -1,21 +1,25 @@
 import SwiftUI
 
 struct AppDetailView: View {
-    @Environment(ContentCoordinator.self) private var coordinator
+    @EnvironmentObject private var coordinator: ContentCoordinator
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmUninstall = false
 
     let app: InstalledApp
 
     var body: some View {
         List {
+            // Header
             Section {
                 HStack(spacing: 16) {
-                    Image(systemName: "app.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.accentColor)
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(appIconGradient)
                         .frame(width: 72, height: 72)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
+                        .overlay(
+                            Image(systemName: appIconName)
+                                .font(.title)
+                                .foregroundColor(.white)
+                        )
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(app.name)
@@ -33,6 +37,7 @@ struct AppDetailView: View {
                 .padding(.vertical, 8)
             }
 
+            // Info
             Section("Info") {
                 LabeledContent("Bundle ID", value: app.bundleID)
                 LabeledContent("Version", value: app.version)
@@ -43,14 +48,15 @@ struct AppDetailView: View {
                     .fontDesign(.monospaced)
             }
 
+            // Actions
             Section {
-                Button(action: { launchApp() }) {
+                Button(action: launchApp) {
                     Label("Launch App", systemImage: "play.fill")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button(role: .destructive, action: { uninstallApp() }) {
+                Button(role: .destructive, action: { confirmUninstall = true }) {
                     Label("Uninstall", systemImage: "trash")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
@@ -58,6 +64,28 @@ struct AppDetailView: View {
         }
         .navigationTitle(app.name)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Uninstall \(app.name)?", isPresented: $confirmUninstall) {
+            Button("Cancel", role: .cancel) {}
+            Button("Uninstall", role: .destructive, action: uninstallApp)
+        } message: {
+            Text("This will remove the app and its data.")
+        }
+    }
+
+    private var appIconGradient: LinearGradient {
+        LinearGradient(
+            colors: [.blue, .purple],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var appIconName: String {
+        switch app.bundleID {
+        case _ where app.bundleID.contains("safari"): return "safari"
+        case _ where app.bundleID.contains("photo"): return "photo"
+        default: return "app.fill"
+        }
     }
 
     private func launchApp() {

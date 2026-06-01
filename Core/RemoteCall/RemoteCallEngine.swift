@@ -21,42 +21,58 @@ public final class RemoteCallEngine: @unchecked Sendable {
         // kernelHandle stored for future use by vendored C primitives
     }
 
-    /// Read process name from a kinfo_proc struct.
-    private static func processName(from proc: kinfo_proc) -> String {
-        withUnsafePointer(to: proc.kp_proc.p_comm) { ptr in
-            String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
-        }
-    }
-
     public func findProcess(named name: String) -> pid_t? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL]
-        var size: size_t = 0
-        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0 else { return nil }
-        let count = size / MemoryLayout<kinfo_proc>.stride
-        var procArray = [kinfo_proc](repeating: kinfo_proc(), count: count)
-        guard sysctl(&mib, UInt32(mib.count), &procArray, &size, nil, 0) == 0 else { return nil }
-        for proc in procArray {
-            let procName = Self.processName(from: proc)
-            if procName == name { return proc.kp_proc.p_pid }
-        }
-        return nil
+        // BSD proc_name() uses the kernel's PID hash table (proc_find)
+        // internally — no proc list walking, no sysctl. Safe on iOS 18+
+        // where sysctl KERN_PROC is restricted, and safe after the
+        // DarkSword race corrupts the kernel proc list.
+        let pid = find_process_via_proc_name(name)
+        return pid >= 0 ? pid : nil
     }
 
     /// Look up a process name from a PID.
     private func findProcessName(for pid: pid_t) -> String? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        var size: size_t = MemoryLayout<kinfo_proc>.stride
-        var proc = kinfo_proc()
-        guard sysctl(&mib, 4, &proc, &size, nil, 0) == 0, size > 0 else { return nil }
-        return Self.processName(from: proc)
+        guard let name = get_process_name_for_pid(pid) else { return nil }
+        return String(cString: name)
     }
 
+    /// Open a Mach-exception hijack connection to a target process.
+    ///
+    /// Resolution order:
+    ///   1. Cached proc address (from post-exploit page-scan or from safe list walk
+    ///      in find_process_via_proc_name) — zero krw for process lookup, immune to
+    ///      DarkSword proc-list corruption.
+    ///   2. find_process_via_proc_name which caches the proc address when found via
+    ///      name-based safe list walk (avoids false-positive PID matches).
+    ///   3. PID-based RemoteCall as last resort (uses safe_procbypid which can return
+    ///      false-positive matches from DarkSword p_pid corruption).
     public func connectToProcess(named name: String) throws -> RemoteCall {
-        guard findProcess(named: name) != nil else {
+        // Try cached proc address first (set by Step 6 in handleExploitSuccess).
+        if let rc = cachedRemoteCall(for: name) { return rc }
+
+        // Fallback: find process by name. The C function caches the verified
+        // proc address via save_cached_proc_addr when it finds by name.
+        guard let pid = findProcess(named: name) else {
             throw RemoteCallError.targetNotFound(name)
         }
-        guard let rc = RemoteCall(process: name, useMigFilterBypass: true) else {
+
+        // Re-check cache — find_process_via_proc_name may have populated it
+        // via safe_find_proc_by_name (by name, immune to false PID matches).
+        if let rc = cachedRemoteCall(for: name) { return rc }
+
+        // Last resort: PID-based init with safe_procbypid.
+        // Has false-positive risk from DarkSword p_pid corruption.
+        guard let rc = RemoteCall(pid: pid, useMigFilterBypass: true) else {
             throw RemoteCallError.initFailed(name)
+        }
+        return rc
+    }
+
+    private func cachedRemoteCall(for name: String) -> RemoteCall? {
+        let procAddr = get_cached_proc_addr(name)
+        guard procAddr > 0 else { return nil }
+        guard let rc = RemoteCall(procAddr: procAddr, useMigFilterBypass: true) else {
+            return nil
         }
         return rc
     }

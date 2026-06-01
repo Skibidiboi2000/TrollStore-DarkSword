@@ -29,17 +29,22 @@ public final class IPAInstaller: @unchecked Sendable {
     private let signatureEditor: CodeSignatureEditor
     private let springBoard: SpringBoardExecutor
     private let persistence: PersistenceService
+    private let shouldPersist: Bool
+    /// Tracks the current pipeline stage for error logging.
+    private var currentStage: String = "idle"
 
     public init(
         parser: IPAParser,
         signatureEditor: CodeSignatureEditor,
         springBoard: SpringBoardExecutor,
-        persistence: PersistenceService
+        persistence: PersistenceService,
+        shouldPersist: Bool = true
     ) {
         self.parser = parser
         self.signatureEditor = signatureEditor
         self.springBoard = springBoard
         self.persistence = persistence
+        self.shouldPersist = shouldPersist
     }
 
     /// Full installation pipeline as an async stream.
@@ -59,6 +64,7 @@ public final class IPAInstaller: @unchecked Sendable {
             Task {
                 do {
                     continuation.yield(.parsing)
+                    currentStage = "parsing"
                     let parsed = try parser.parse(ipaURL: ipaURL)
                     defer { try? FileManager.default.removeItem(atPath: parsed.tempDirectory) }
 
@@ -67,15 +73,18 @@ public final class IPAInstaller: @unchecked Sendable {
                     }
 
                     continuation.yield(.injectingEntitlements)
+                    currentStage = "injectingEntitlements"
                     try signatureEditor.injectEntitlements(into: parsed.executablePath)
 
                     continuation.yield(.copyingToApplications)
+                    currentStage = "copyingToApplications"
                     try await springBoard.installAppBundle(
                         sourcePath: parsed.bundlePath,
                         bundleID: parsed.bundleID
                     )
 
                     continuation.yield(.registeringWithLaunchServices)
+                    currentStage = "registeringWithLaunchServices"
                     try await springBoard.registerApp(bundleID: parsed.bundleID)
 
                     let app = InstalledApp(
@@ -87,12 +96,18 @@ public final class IPAInstaller: @unchecked Sendable {
                         executableName: parsed.executableName
                     )
 
-                    persistence.addApp(app)
+                    if shouldPersist {
+                        persistence.addApp(app)
+                    }
 
                     LogManager.shared.append("Installed \(parsed.name) v\(parsed.version)", tag: "IPAInstaller")
                     continuation.yield(.complete(app))
                     continuation.finish()
                 } catch {
+                    LogManager.shared.append(
+                        "[\(currentStage)] \(type(of: error)): \(error.localizedDescription)",
+                        tag: "InstallFatal"
+                    )
                     continuation.finish(throwing: error)
                 }
             }

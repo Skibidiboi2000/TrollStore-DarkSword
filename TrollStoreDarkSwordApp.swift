@@ -8,22 +8,33 @@ struct TrollStoreDarkSwordApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(coordinator)
+                .environmentObject(coordinator)
                 .preferredColorScheme(isDarkMode ? .dark : nil)
+                .onOpenURL { url in
+                    coordinator.handleImportedIPA(url)
+                }
         }
     }
 }
 
 struct ContentView: View {
-    @Environment(ContentCoordinator.self) private var coordinator
+    @EnvironmentObject private var coordinator: ContentCoordinator
+
+    private var viewModel: ExploitViewModel {
+        coordinator.exploitViewModel
+    }
 
     var body: some View {
         Group {
             switch coordinator.appState {
             case .sandboxed:
                 ExploitView()
-            case .obtainingOffsets:
+                    .transition(AppTheme.springTransition)
+
+            case .obtainingOffsets, .exploiting:
                 ExploitProgressView()
+                    .transition(AppTheme.springTransition)
+
             case .exploitFailed(let reason):
                 VStack(spacing: 16) {
                     Text(coordinator.deviceInfo.isSupported ? "Exploit Failed" : "Unsupported Device")
@@ -40,8 +51,20 @@ struct ContentView: View {
                     }
                 }
                 .padding()
+                .transition(AppTheme.springTransition)
+
             case .patched:
-                PatchedView()
+                if viewModel.currentStage == .complete && !coordinator.hasSeenSuccess {
+                    ExploitSuccessView()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                            removal: .opacity.combined(with: .move(edge: .bottom))
+                        ))
+                } else {
+                    PatchedView()
+                        .transition(.opacity)
+                }
+
             case .panicRecovery:
                 VStack(spacing: 16) {
                     Text("Panic Detected")
@@ -52,11 +75,8 @@ struct ContentView: View {
                     }
                 }
                 .padding()
-            case .exploiting:
-                ExploitProgressView()
             }
         }
-        .transition(.opacity.combined(with: .scale))
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: coordinator.appState)
     }
 }

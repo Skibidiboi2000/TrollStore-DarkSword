@@ -28,6 +28,24 @@ targets:
         createIntermediateGroups: false
     info:
       path: Info.plist
+      properties:
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.trollstore.ipa
+            UTTypeConformsTo:
+              - public.data
+              - com.pkware.zip-archive
+            UTTypeDescription: IPA Archive
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - ipa
+              public.mime-type:
+                - application/octet-stream
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: IPA Archive
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.trollstore.ipa
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.trollstoreclone

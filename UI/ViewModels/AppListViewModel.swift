@@ -1,10 +1,9 @@
 import SwiftUI
 
 @MainActor
-@Observable
-public final class AppListViewModel {
-    public var installedApps: [InstalledApp] = []
-    public var searchText = ""
+public final class AppListViewModel: ObservableObject {
+    @Published public var installedApps: [InstalledApp] = []
+    @Published public var searchText = ""
 
     private let persistence: PersistenceService
     private let springBoard: SpringBoardExecutor
@@ -17,7 +16,14 @@ public final class AppListViewModel {
     }
 
     public func refresh() {
-        installedApps = persistence.loadInstalledApps()
+        installedApps = persistence.loadInstalledApps().filter { app in
+            FileManager.default.fileExists(atPath: app.path)
+        }
+    }
+
+    /// Scan /Applications/ for .app bundles not in the installed list and add them.
+    public func rescanInstalledApps() {
+        installedApps = persistence.rescanApplicationsDirectory()
     }
 
     public var filteredApps: [InstalledApp] {

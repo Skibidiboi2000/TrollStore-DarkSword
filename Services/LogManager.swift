@@ -110,3 +110,18 @@ public final class LogManager: @unchecked Sendable {
         endSessionInternal()
     }
 }
+
+// MARK: - C-callable bridge (for Vendored/kexploit C code)
+
+/// C-callable logging bridge so Vendored C code (utils.m, etc.) can write
+/// into the same LogManager log file that Swift uses.
+@_cdecl("utils_log")
+func _utilsLog(message: UnsafePointer<CChar>, tag: UnsafePointer<CChar>) {
+    let msg = String(cString: message)
+    let t = String(cString: tag)
+    if t.isEmpty {
+        LogManager.shared.append(msg, tag: "Utils")
+    } else {
+        LogManager.shared.append(msg, tag: t)
+    }
+}

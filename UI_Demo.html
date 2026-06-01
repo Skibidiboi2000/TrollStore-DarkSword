@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrollStore DarkSword — UI Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+    background: #0a0a0c;
+    min-height: 100vh;
+    padding: 40px 32px;
+    position: relative;
+    overflow-x: hidden;
+  }
+  /* Ambient glow */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -30%;
+    left: -10%;
+    width: 60%;
+    height: 80%;
+    background: radial-gradient(ellipse, rgba(10,77,153,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -20%;
+    right: -10%;
+    width: 50%;
+    height: 60%;
+    background: radial-gradient(ellipse, rgba(102,26,153,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 48px;
+    position: relative;
+  }
+  .page-header h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #f5f5f7 30%, #6e6e73);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .page-header .sub {
+    color: #636366;
+    font-size: 15px;
+    margin-top: 6px;
+    letter-spacing: 0.3px;
+  }
+  .page-header .badge-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #98989d;
+    margin-top: 12px;
+  }
+
+  .gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 36px;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== PHONE FRAME ===== */
+  .phone-frame {
+    width: 390px;
+    background: linear-gradient(160deg, #1c1c1e 0%, #161618 100%);
+    border-radius: 48px;
+    padding: 18px 12px 20px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.05),
+      inset 0 0 0 1px rgba(255,255,255,0.03);
+    position: relative;
+    transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.4s ease;
+  }
+  .phone-frame:hover {
+    transform: translateY(-6px);
+    box-shadow:
+      0 40px 100px rgba(0,0,0,0.7),
+      0 0 0 1px rgba(255,255,255,0.08),
+      inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+
+  /* Dynamic Island */
+  .dynamic-island {
+    width: 126px; height: 30px;
+    background: #000;
+    border-radius: 0 0 20px 20px;
+    margin: -14px auto 8px;
+    position: relative;
+    z-index: 10;
+  }
+  .dynamic-island::after {
+    content: '';
+    position: absolute;
+    right: 18px; top: 50%;
+    transform: translateY(-50%);
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #1a5c2a;
+    box-shadow: 0 0 6px rgba(26,92,42,0.6);
+  }
+
+  .screen-label {
+    text-align: center;
+    font-size: 10px;
+    color: #48484a;
+    padding: 4px 0 8px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .screen {
+    background: #000;
+    border-radius: 32px;
+    overflow: hidden;
+    overflow-y: auto;
+    height: 760px;
+    position: relative;
+    box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.05);
+  }
+  .screen-inner { padding: 20px 20px 0; }
+  ::-webkit-scrollbar { width: 0; }
+
+  /* ===== TYPOGRAPHY ===== */
+  .fs-28 { font-size: 28px; }
+  .fs-22 { font-size: 22px; }
+  .fs-20 { font-size: 20px; }
+  .fs-17 { font-size: 17px; }
+  .fs-15 { font-size: 15px; }
+  .fs-13 { font-size: 13px; }
+  .fs-12 { font-size: 12px; }
+  .fs-11 { font-size: 11px; }
+  .fw-8 { font-weight: 800; }
+  .fw-7 { font-weight: 700; }
+  .fw-6 { font-weight: 600; }
+  .fw-5 { font-weight: 500; }
+  .text-sec { color: #8e8e93; }
+  .text-ter { color: #636366; }
+  .text-white { color: #f5f5f7; }
+  .text-green { color: #30d158; }
+  .text-blue { color: #0a84ff; }
+  .text-red { color: #ff453a; }
+  .text-orange { color: #ff9f0a; }
+  .mono { font-family: 'SF Mono', 'Menlo', monospace; }
+  .track-1 { letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .flex-c { display: flex; flex-direction: column; }
+  .flex-r { display: flex; align-items: center; }
+  .gap-4 { gap: 4px; }
+  .gap-6 { gap: 6px; }
+  .gap-8 { gap: 8px; }
+  .gap-10 { gap: 10px; }
+  .gap-12 { gap: 12px; }
+  .gap-14 { gap: 14px; }
+  .gap-16 { gap: 16px; }
+  .gap-20 { gap: 20px; }
+  .gap-24 { gap: 24px; }
+  .spacer { flex: 1; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-20 { margin-top: 20px; }
+  .mt-24 { margin-top: 24px; }
+  .mt-28 { margin-top: 28px; }
+  .mt-32 { margin-top: 32px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .px-20 { padding-left: 20px; padding-right: 20px; }
+  .py-8 { padding-top: 8px; padding-bottom: 8px; }
+  .t-center { text-align: center; }
+
+  /* ===== GLASS CARD ===== */
+  .glass {
+    background: rgba(28,28,30,0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 0.5px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+  }
+  .glass-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px;
+  }
+  .glass-row + .glass-row {
+    border-top: 0.5px solid rgba(255,255,255,0.05);
+  }
+
+  /* ===== GLOW GRADIENT ICONS ===== */
+  .gicon {
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .gicon::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .gicon-s { width: 24px; height: 24px; border-radius: 7px; font-size: 12px; }
+  .gicon-m { width: 40px; height: 40px; border-radius: 10px; }
+  .gicon-l { width: 52px; height: 52px; border-radius: 14px; }
+  .gicon-xl { width: 72px; height: 72px; border-radius: 20px; }
+  .gicon-xxl { width: 88px; height: 88px; border-radius: 24px; }
+  .gicon-round { width: 64px; height: 64px; border-radius: 50%; }
+  .gicon-round-lg { width: 96px; height: 96px; border-radius: 50%; }
+
+  .g-blue-purple { background: linear-gradient(135deg, #0a4d99 0%, #5b1a99 100%); }
+  .g-accent { background: linear-gradient(135deg, #007aff 0%, #af52de 100%); }
+  .g-green-teal { background: linear-gradient(135deg, #30d158 0%, #40c8e0 100%); }
+  .g-orange-pink { background: linear-gradient(135deg, #ff9f0a 0%, #ff375f 100%); }
+  .g-purple-indigo { background: linear-gradient(135deg, #bf5af2 0%, #5856d6 100%); }
+  .g-pink-orange { background: linear-gradient(135deg, #ff375f 0%, #ff9f0a 100%); }
+  .g-cyan-blue { background: linear-gradient(135deg, #64d2ff 0%, #007aff 100%); }
+  .g-warning { background: linear-gradient(135deg, #ff9f0a 0%, #ffcc00 100%); }
+
+  .shadow-blue { box-shadow: 0 8px 24px rgba(10,77,153,0.3); }
+  .shadow-green { box-shadow: 0 8px 24px rgba(48,209,88,0.25); }
+  .shadow-accent { box-shadow: 0 8px 24px rgba(0,122,255,0.3); }
+
+  /* ===== BADGE / CHIP ===== */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .badge-green { background: rgba(48,209,88,0.12); color: #30d158; }
+  .badge-red { background: rgba(255,69,58,0.12); color: #ff453a; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: 20px;
+    background: rgba(255,255,255,0.05);
+    border: 0.5px solid rgba(255,255,255,0.06);
+    color: #8e8e93; font-size: 11px; font-weight: 500;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn-primary {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 15px 0;
+    border: none; border-radius: 16px;
+    color: #fff; font-size: 17px; font-weight: 600;
+    cursor: pointer; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #0a4d99 0%, #5b1a99 100%);
+    box-shadow: 0 6px 20px rgba(10,77,153,0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .btn-primary:hover { transform: scale(1.02); box-shadow: 0 8px 28px rgba(10,77,153,0.45); }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  .btn-primary .sub { font-size: 11px; opacity: 0.7; }
+
+  .btn-bordered {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 24px;
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
+    color: #f5f5f7; font-size: 15px; font-weight: 600;
+    cursor: pointer; background: transparent;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .btn-bordered:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); }
+  .btn-destructive { border-color: rgba(255,69,58,0.3); color: #ff453a; }
+  .btn-destructive:hover { border-color: #ff453a; background: rgba(255,69,58,0.06); }
+
+  /* ===== TIMELINE STAGES ===== */
+  .pstage {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+  }
+  .pstage-dot {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .pstage-dot-green { background: #30d158; }
+  .pstage-dot-blue {
+    background: #0a84ff;
+    box-shadow: 0 0 12px rgba(10,132,255,0.4);
+    animation: pulse-blue 1.5s ease-in-out infinite;
+  }
+  .pstage-dot-gray { background: #38383a; }
+  .pstage-dot-red { background: #ff453a; box-shadow: 0 0 12px rgba(255,69,58,0.4); }
+  .pstage-check { color: #fff; font-size: 11px; font-weight: 700; }
+
+  @keyframes pulse-blue {
+    0%, 100% { box-shadow: 0 0 8px rgba(10,132,255,0.3); }
+    50% { box-shadow: 0 0 18px rgba(10,132,255,0.6); }
+  }
+
+  .pstage-active { background: rgba(10,132,255,0.06); border-radius: 10px; border: 1px solid rgba(10,132,255,0.15); }
+
+  /* ===== SPINNER RING ===== */
+  .ring-wrap { position: relative; width: 68px; height: 68px; margin: 0 auto; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-wrap .bg { stroke: rgba(255,255,255,0.08); }
+  .ring-wrap .fg {
+    stroke: url(#ringGrad);
+    stroke-dasharray: 157; stroke-dashoffset: 47;
+    stroke-linecap: round;
+    animation: ring-spin 1.2s linear infinite;
+    filter: drop-shadow(0 0 6px rgba(0,122,255,0.3));
+  }
+  @keyframes ring-spin { to { transform: rotate(360deg); } }
+
+  /* ===== TAB BAR ===== */
+  .tab-bar {
+    display: flex; background: rgba(22,22,24,0.92);
+    backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+    border-top: 0.5px solid rgba(255,255,255,0.06);
+    padding: 6px 0 4px;
+    position: sticky; bottom: 0;
+  }
+  .tab-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 3px 0 6px;
+    font-size: 10px; color: #636366; cursor: pointer;
+    transition: color 0.2s;
+  }
+  .tab-item.active { color: #0a84ff; }
+  .tab-item svg { width: 24px; height: 24px; }
+
+  /* ===== SEARCH BAR ===== */
+  .search-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.05);
+    border-radius: 10px; padding: 10px 14px;
+    margin: 8px 16px; color: #636366; font-size: 15px;
+  }
+  .search-bar:focus-within { border-color: rgba(10,132,255,0.3); }
+
+  /* ===== TOGGLE ===== */
+  .toggle { width: 51px; height: 31px; border-radius: 16px; background: #39393d; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.2s; }
+  .toggle.on { background: #30d158; }
+  .toggle-knob { width: 27px; height: 27px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); transition: left 0.2s cubic-bezier(0.2,0,0,1); }
+  .toggle.on .toggle-knob { left: 22px; }
+
+  /* ===== APP ROW ===== */
+  .app-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px;
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+  .app-row:hover { background: rgba(255,255,255,0.02); }
+  .app-row + .app-row { border-top: 0.5px solid rgba(255,255,255,0.04); }
+
+  /* ===== ENTRANCE ANIMATIONS ===== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .anim-fade { animation: fadeUp 0.5s ease both; }
+  .anim-fade-1 { animation-delay: 0.1s; }
+  .anim-fade-2 { animation-delay: 0.2s; }
+  .anim-fade-3 { animation-delay: 0.3s; }
+  .anim-fade-4 { animation-delay: 0.4s; }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.7); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .anim-scale { animation: scaleIn 0.5s cubic-bezier(0.2,0,0,1) both; }
+
+  /* ===== GRADIENT TEXT ===== */
+  .grad-text {
+    background: linear-gradient(135deg, #f5f5f7 30%, #6e6e73);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .grad-text-accent {
+    background: linear-gradient(135deg, #007aff, #af52de);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ===== SECTION HEADER ===== */
+  .sec-header {
+    font-size: 13px; font-weight: 600; color: #636366;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 24px 16px 8px;
+  }
+  .sec-header.danger { color: rgba(255,69,58,0.8); }
+
+  /* ===== DIVIDER ===== */
+  .divider { height: 0.5px; background: rgba(255,255,255,0.04); }
+
+  /* Nav bar */
+  .nav-bar { display: flex; align-items: center; padding: 8px 16px; }
+  .nav-title { font-size: 28px; font-weight: 700; flex: 1; }
+
+  /* ===== SCROLL SNAP ===== */
+  .gallery {
+    scroll-snap-type: x mandatory;
+  }
+  .phone-frame {
+    scroll-snap-align: start;
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0"><defs>
+  <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#007aff"/>
+    <stop offset="100%" stop-color="#af52de"/>
+  </linearGradient>
+</defs></svg>
+
+<div class="page-header">
+  <h1>TrollStore DarkSword</h1>
+  <p class="sub">Complete UI showcase — 12 screens</p>
+  <span class="badge-count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Redesigned</span>
+</div>
+
+<div class="gallery">
+
+  <!-- ============ 1. EXPLOIT VIEW (sandboxed) ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">ExploitView — sandboxed</div>
+    <div class="screen">
+      <div class="screen-inner">
+        <!-- Hero -->
+        <div class="t-center anim-fade anim-fade-1">
+          <div class="gicon gicon-xxl g-blue-purple shadow-blue" style="margin:0 auto">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <div class="fs-28 fw-8 mt-16 text-white" style="letter-spacing:-0.3px">TrollStore DarkSword</div>
+          <div class="fs-17 text-sec mt-4">Permanent IPA Installation</div>
+        </div>
+
+        <!-- Device Card -->
+        <div class="glass mt-20 anim-fade anim-fade-2">
+          <div class="glass-row"><span class="fs-15 text-sec">Model</span><span class="fs-15 fw-6 text-white">iPhone15,2</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">iOS</span><span class="fs-15 fw-6 text-white">18.3.1</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Chip</span><span class="fs-15 fw-6 text-white">A16</span></div>
+          <div class="glass-row">
+            <span class="fs-15 text-sec">Compatibility</span>
+            <span class="badge badge-green"><span class="badge-dot" style="background:#30d158"></span>Supported</span>
+          </div>
+        </div>
+
+        <!-- Warning -->
+        <div class="flex-r gap-10 mt-16 anim-fade anim-fade-2" style="align-items:flex-start;padding:14px;background:rgba(255,159,10,0.06);border-radius:12px;border:0.5px solid rgba(255,159,10,0.1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="fs-12 text-sec" style="line-height:1.5">This will attempt to exploit the kernel. If something goes wrong, the device may panic and reboot. Save your work first.</span>
+        </div>
+
+        <!-- Button -->
+        <button class="btn-primary mt-16 anim-fade anim-fade-3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Exploit Device</span>
+          <span class="sub">DarkSword • iOS 17.0–26.0</span>
+        </button>
+
+        <!-- Badges -->
+        <div class="flex-r gap-6 mt-20 anim-fade anim-fade-4" style="flex-wrap:wrap;justify-content:center">
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg> PAC Bypass</span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg> A16</span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> PAC Ready</span>
+        </div>
+        <div class="t-center mt-12" style="font-size:11px;color:#48484a;letter-spacing:0.3px">v1.0 · DarkSword</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2. EXPLOIT PROGRESS ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">ExploitProgressView — running</div>
+    <div class="screen">
+      <div class="screen-inner">
+        <!-- Ring + label -->
+        <div class="t-center anim-fade anim-fade-1">
+          <div class="ring-wrap">
+            <svg width="68" height="68" viewBox="0 0 68 68">
+              <circle class="bg" cx="34" cy="34" r="25" fill="none" stroke-width="4"/>
+              <circle class="fg" cx="34" cy="34" r="25" fill="none" stroke-width="4"/>
+            </svg>
+          </div>
+          <div class="fs-20 fw-7 text-white mt-12">Racing for kernel r/w...</div>
+          <div class="fs-15 text-sec mt-4">Stage 7 of 11</div>
+        </div>
+
+        <!-- Pipeline -->
+        <div class="mt-20 anim-fade anim-fade-2">
+          <div class="fs-12 fw-6 text-ter track-1 mb-8 px-20">Pipeline</div>
+          <div class="glass">
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Starting exploit...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Downloading kernelcache...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Running XPF scanning...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Creating IOSurface...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Spawning race threads...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-green"><span class="pstage-check">✓</span></div><div><div class="fs-15 text-white">Racing for kernel r/w...</div><div class="fs-12 text-green">Complete</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage pstage-active"><div class="pstage-dot pstage-dot-blue"><div style="width:8px;height:8px;background:#fff;border-radius:50%"></div></div><div><div class="fs-15 fw-6 text-white">Racing for kernel r/w...</div><div class="fs-12 text-blue">In progress</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-gray"><div style="width:8px;height:8px;background:#636366;border-radius:50%"></div></div><div><div class="fs-15" style="color:#636366">Patching AMFI...</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-gray"><div style="width:8px;height:8px;background:#636366;border-radius:50%"></div></div><div><div class="fs-15" style="color:#636366">Escaping sandbox...</div></div></div>
+            <div class="divider" style="margin-left:50px"></div>
+            <div class="pstage"><div class="pstage-dot pstage-dot-gray"><div style="width:8px;height:8px;background:#636366;border-radius:50%"></div></div><div><div class="fs-15" style="color:#636366">Kernel patched ✓</div></div></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div class="mt-16 anim-fade anim-fade-3">
+          <div class="fs-12 fw-6 text-ter track-1 mb-8 px-20">Log</div>
+          <div class="glass" style="padding:14px;font-size:11px;font-family:'SF Mono',monospace;color:#636366;line-height:1.7;max-height:100px;overflow-y:auto">
+            [01:23:45] [Pipeline] Starting pipeline...<br>
+            [01:23:46] [Pipeline] Offsets resolved — starting exploit<br>
+            [01:23:47] [ExploitStage] Creating IOSurface...<br>
+            [01:23:48] [ExploitStage] Spawning race threads...<br>
+            [01:23:50] [ExploitStage] Racing for kernel r/w...<br>
+            [01:23:52] [ExploitStage] Race won — establishing primitives...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 3. EXPLOIT SUCCESS ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">ExploitSuccessView</div>
+    <div class="screen" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="t-center px-20">
+        <div class="gicon gicon-round-lg g-green-teal shadow-green anim-scale" style="margin:0 auto">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="fs-28 fw-8 mt-20 text-white">Exploit Successful</div>
+        <div class="fs-17 text-sec mt-8" style="max-width:280px;margin:0 auto">Kernel has been patched. TrollStore is now ready.</div>
+
+        <div class="glass mt-24" style="margin:24px 16px 0">
+          <div class="glass-row"><span class="fs-15 text-sec">Elapsed</span><span class="fs-15 fw-6 text-white">~2s</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">PAC Status</span><span class="text-green fw-6 fs-15">Bypassed</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Kernel Patches</span><span class="text-green fw-6 fs-15">Applied</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Sandbox</span><span class="text-green fw-6 fs-15">Cleared</span></div>
+        </div>
+
+        <button class="btn-primary mt-28" style="width:260px;margin:28px auto 0;background:linear-gradient(135deg,#007aff 0%,#af52de 100%);box-shadow:0 6px 20px rgba(0,122,255,0.35)">
+          Continue
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 4. EXPLOIT FAILED ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">Exploit Failed / Unsupported</div>
+    <div class="screen" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="t-center px-20">
+        <div class="gicon gicon-round-lg" style="margin:0 auto;background:linear-gradient(135deg,#ff453a 0%,#c6201a 100%);box-shadow:0 8px 24px rgba(255,69,58,0.25)">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <div class="fs-28 fw-8 mt-16 text-red">Unsupported Device</div>
+        <div class="fs-17 text-sec mt-8" style="max-width:280px;margin:0 auto">iOS 26.1 is not supported. Requires 17.0 – 26.0.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 5. PANIC RECOVERY ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">PanicRecovery</div>
+    <div class="screen" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="t-center px-20">
+        <div class="gicon gicon-round-lg g-warning" style="margin:0 auto;box-shadow:0 8px 24px rgba(255,159,10,0.25)">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="fs-28 fw-8 mt-16 text-orange">Panic Detected</div>
+        <div class="fs-17 text-sec mt-8" style="max-width:290px;margin:0 auto">The device may have panicked. If it rebooted, re-launch the app.</div>
+        <button class="btn-primary mt-28" style="width:180px;margin:28px auto 0;background:linear-gradient(135deg,#ff9f0a 0%,#e68a00 100%);box-shadow:0 6px 20px rgba(255,159,10,0.3)">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 6. APPS TAB ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">PatchedView — Apps tab</div>
+    <div class="screen" style="display:flex;flex-direction:column">
+      <div class="nav-bar">
+        <span class="fs-28 fw-8 text-white">Apps</span>
+        <span class="spacer"></span>
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(0,122,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+      </div>
+      <div class="search-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>Search apps</span>
+      </div>
+      <div style="flex:1;overflow-y:auto">
+        <div class="app-row">
+          <div class="gicon gicon-l g-blue-purple shadow-blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg></div>
+          <div class="flex-c gap-4" style="flex:1"><div class="fs-17 fw-6 text-white">Filza</div><div class="fs-12 text-ter mono">com.tigisoftware.filza</div></div>
+          <div class="fs-15 text-sec">v4.0.1</div>
+        </div>
+        <div class="app-row">
+          <div class="gicon gicon-l g-orange-pink"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M9 2l-1 7h8l-1-7M3 9h18v13H3z"/></svg></div>
+          <div class="flex-c gap-4" style="flex:1"><div class="fs-17 fw-6 text-white">iTorrent</div><div class="fs-12 text-ter mono">com.example.itorrent</div></div>
+          <div class="fs-15 text-sec">v2.1.0</div>
+        </div>
+        <div class="app-row">
+          <div class="gicon gicon-l g-green-teal shadow-green"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          <div class="flex-c gap-4" style="flex:1"><div class="fs-17 fw-6 text-white">uYouPlus</div><div class="fs-12 text-ter mono">com.google.ios.youtube</div></div>
+          <div class="fs-15 text-sec">v19.08.1</div>
+        </div>
+        <div class="app-row">
+          <div class="gicon gicon-l g-purple-indigo"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2m16-4l-8 8-4-4"/></svg></div>
+          <div class="flex-c gap-4" style="flex:1"><div class="fs-17 fw-6 text-white">LiveContainer</div><div class="fs-12 text-ter mono">com.example.livecontainer</div></div>
+          <div class="fs-15 text-sec">v3.2.0</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Apps
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg>
+          Install
+        </div>
+        <div class="tab-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Settings
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 7. APP DETAIL ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">AppDetailView — Filza</div>
+    <div class="screen">
+      <div class="flex-r gap-8 nav-bar">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span style="flex:1;text-align:center;font-size:17px;font-weight:600;color:#f5f5f7">Filza</span>
+        <span style="width:24px"></span>
+      </div>
+      <div>
+        <div class="glass" style="margin:0 16px;border-radius:16px">
+          <div style="padding:16px;display:flex;gap:16px;align-items:center">
+            <div class="gicon gicon-xl g-blue-purple shadow-blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg></div>
+            <div><div class="fs-22 fw-7 text-white">Filza</div><div class="fs-13 text-ter mono mt-4">com.tigisoftware.filza</div><div class="fs-15 text-sec mt-4">v4.0.1</div></div>
+          </div>
+        </div>
+
+        <div class="sec-header">Info</div>
+        <div class="glass" style="margin:0 16px">
+          <div class="glass-row"><span class="fs-15 text-sec">Bundle ID</span><span class="fs-13 mono" style="color:#8e8e93">com.tigisoftware.filza</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Version</span><span class="fs-15 text-white">4.0.1</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Executable</span><span class="fs-15 text-white">filza</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Installed</span><span class="fs-15 text-white">Jun 1, 2026, 2:30 PM</span></div>
+          <div class="glass-row"><span class="fs-15 text-sec">Path</span><span class="mono fs-12" style="color:#636366;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">/Applications/Filza.app</span></div>
+        </div>
+
+        <div class="sec-header">Actions</div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px">
+          <button style="width:100%;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#0a84ff 0%,#0060df 100%);color:#fff;font-size:17px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(10,132,255,0.3)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Launch App
+          </button>
+          <button style="width:100%;padding:14px;border:1px solid rgba(255,69,58,0.25);border-radius:14px;background:transparent;color:#ff453a;font-size:17px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:border-color 0.2s">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> Uninstall
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 8. INSTALL VIEW (idle) ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">InstallView — idle</div>
+    <div class="screen" style="display:flex;flex-direction:column">
+      <div class="nav-bar"><span class="fs-28 fw-8 text-white">Install</span><span class="spacer"></span></div>
+      <div class="t-center px-20" style="flex:1">
+        <div class="gicon gicon-xxl g-accent shadow-accent anim-scale" style="margin:48px auto 0">
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg>
+        </div>
+        <div class="fs-24 fw-8 text-white mt-16">Install IPA</div>
+        <div class="fs-17 text-sec mt-8" style="max-width:260px;margin:0 auto">Import an IPA file to install it with full entitlements.</div>
+        <button class="btn-primary mt-20" style="width:280px;margin:20px auto 0;padding:14px 0;background:linear-gradient(135deg,#007aff 0%,#0060df 100%);box-shadow:0 6px 20px rgba(0,122,255,0.3)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          Select IPA File
+        </button>
+
+        <div class="mt-20">
+          <div class="fs-12 fw-6 text-ter track-1 mb-8" style="text-align:left;padding:0 4px">Recently Installed</div>
+          <div class="glass">
+            <div class="flex-r gap-12" style="padding:12px 14px">
+              <div class="gicon gicon-m g-blue-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg></div>
+              <div style="flex:1;text-align:left"><div class="fs-15 fw-5 text-white">Filza</div><div class="fs-12 text-ter">2 minutes ago</div></div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#30d158"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+            <div class="divider" style="margin-left:66px"></div>
+            <div class="flex-r gap-12" style="padding:12px 14px">
+              <div class="gicon gicon-m g-orange-pink"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M9 2l-1 7h8l-1-7M3 9h18v13H3z"/></svg></div>
+              <div style="flex:1;text-align:left"><div class="fs-15 fw-5 text-white">iTorrent</div><div class="fs-12 text-ter">1 hour ago</div></div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#30d158"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Apps</div>
+        <div class="tab-item active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg>Install</div>
+        <div class="tab-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 9. INSTALL PROGRESS ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">InstallView — installing</div>
+    <div class="screen" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="t-center px-20">
+        <div class="ring-wrap">
+          <svg width="68" height="68" viewBox="0 0 68 68">
+            <circle class="bg" cx="34" cy="34" r="25" fill="none" stroke-width="4"/>
+            <circle class="fg" cx="34" cy="34" r="25" fill="none" stroke-width="4"/>
+          </svg>
+        </div>
+        <div class="fs-20 fw-7 text-white mt-12">Copying...</div>
+
+        <div class="glass mt-16" style="text-align:left">
+          <div class="pstage"><div class="pstage-dot pstage-dot-green" style="width:22px;height:22px"><span class="pstage-check">✓</span></div><div><div class="fs-14" style="color:#636366">Importing</div></div></div>
+          <div class="divider" style="margin-left:44px"></div>
+          <div class="pstage"><div class="pstage-dot pstage-dot-green" style="width:22px;height:22px"><span class="pstage-check">✓</span></div><div><div class="fs-14" style="color:#636366">Parsing</div></div></div>
+          <div class="divider" style="margin-left:44px"></div>
+          <div class="pstage"><div class="pstage-dot pstage-dot-green" style="width:22px;height:22px"><span class="pstage-check">✓</span></div><div><div class="fs-14" style="color:#636366">Injecting entitlements</div></div></div>
+          <div class="divider" style="margin-left:44px"></div>
+          <div class="pstage pstage-active"><div class="pstage-dot pstage-dot-blue" style="width:22px;height:22px"><div style="width:7px;height:7px;background:#fff;border-radius:50%"></div></div><div><div class="fs-14 fw-6 text-white">Copying to /Applications/</div></div></div>
+          <div class="divider" style="margin-left:44px"></div>
+          <div class="pstage"><div class="pstage-dot pstage-dot-gray" style="width:22px;height:22px"><div style="width:7px;height:7px;background:#636366;border-radius:50%"></div></div><div><div class="fs-14" style="color:#636366">Registering with LaunchServices</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 10. SETTINGS ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">SettingsView</div>
+    <div class="screen">
+      <div class="nav-bar"><span class="fs-28 fw-8 text-white">Settings</span></div>
+      <div style="overflow-y:auto">
+
+        <!-- Kernel -->
+        <div class="sec-header">Kernel</div>
+        <div class="glass" style="margin:0 16px">
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#007aff,#0050b0)"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5z"/></svg></div>
+            <span class="fs-17 text-white">Re-patch Kernel</span>
+          </div>
+          <div class="divider" style="margin-left:52px"></div>
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#af52de,#7b2da8)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></div>
+            <span class="fs-17 text-white">Re-register All Apps</span>
+          </div>
+          <div class="divider" style="margin-left:52px"></div>
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#007aff,#0050b0)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+            <span class="fs-17 text-white">Rescan Installed Apps</span>
+          </div>
+        </div>
+
+        <!-- General -->
+        <div class="sec-header">General</div>
+        <div class="glass" style="margin:0 16px">
+          <div class="flex-r gap-12" style="padding:12px 16px">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#af52de,#7b2da8)"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div>
+            <span class="fs-17 text-white spacer">Dark Mode</span>
+            <div class="toggle"><div class="toggle-knob"></div></div>
+          </div>
+          <div class="divider" style="margin-left:52px"></div>
+          <div class="flex-r gap-12" style="padding:12px 16px">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#ff9f0a,#cc7a00)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg></div>
+            <span class="fs-17 text-white spacer">Persist Installation</span>
+            <div class="toggle on"><div class="toggle-knob"></div></div>
+          </div>
+        </div>
+
+        <!-- Data -->
+        <div class="sec-header">Data</div>
+        <div class="glass" style="margin:0 16px">
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#30d158,#1a8f3a)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg></div>
+            <span class="fs-17 text-white">Export App List</span>
+          </div>
+        </div>
+
+        <!-- Diagnostics -->
+        <div class="sec-header">Diagnostics</div>
+        <div class="glass" style="margin:0 16px">
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#636366,#3a3a3c)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+            <span class="fs-17 text-white spacer">Exploit Log</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#48484a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="divider" style="margin-left:52px"></div>
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#007aff,#0050b0)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>
+            <span class="fs-17 text-white spacer">About</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#48484a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="sec-header danger">Danger Zone</div>
+        <div class="glass" style="margin:0 16px 24px;border:0.5px solid rgba(255,69,58,0.1)">
+          <div class="flex-r gap-12" style="padding:12px 16px;cursor:pointer">
+            <div class="gicon gicon-s" style="background:linear-gradient(135deg,#ff453a,#b81a10)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></div>
+            <span style="font-size:17px;color:#ff453a">Uninstall All Apps</span>
+          </div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Apps</div>
+        <div class="tab-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg>Install</div>
+        <div class="tab-item active"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 11. EXPLOIT LOG ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">Exploit Log</div>
+    <div class="screen">
+      <div class="flex-r gap-8" style="padding:10px 16px">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span style="flex:1;text-align:center;font-size:17px;font-weight:600;color:#f5f5f7">Exploit Log</span>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5-5v12"/></svg>
+      </div>
+      <div style="padding:20px;font-size:12px;font-family:'SF Mono',monospace;line-height:1.8">
+        <div style="color:#30d158">[01:23:45] [Pipeline] Starting pipeline — resolving kernel offsets...</div>
+        <div style="color:#8e8e93">[01:23:46] [Pipeline] SpringBoard PID cached: 34</div>
+        <div style="color:#64d2ff">[01:23:46] [Pipeline] Offsets resolved — starting exploit</div>
+        <div style="color:#8e8e93">[01:23:47] [ExploitStage] Creating IOSurface...</div>
+        <div style="color:#8e8e93">[01:23:48] [ExploitStage] Spawning race threads...</div>
+        <div style="color:#ff9f0a">[01:23:50] [ExploitStage] Racing for kernel r/w...</div>
+        <div style="color:#30d158">[01:23:52] [ExploitStage] Race won — establishing primitives...</div>
+        <div style="color:#8e8e93">[01:23:53] [Pipeline] Kernel r/w established — resolving kernel base...</div>
+        <div style="color:#8e8e93">[01:23:53] [Pipeline] Kernel base resolved — applying patches...</div>
+        <div style="color:#30d158">[01:23:54] [Pipeline] mac_proc_enforce zeroed — extra AMFI defense ✓</div>
+        <div style="color:#8e8e93">[01:23:54] [Pipeline] Patches applied — initializing post-exploit offsets...</div>
+        <div style="color:#64d2ff">[01:23:55] [Pipeline] Post-exploit offsets initialized</div>
+        <div style="color:#8e8e93">[01:23:55] [Pipeline] kernproc via cache at 0xfffff00030a00000</div>
+        <div style="color:#30d158">[01:23:55] [Pipeline] Sandbox cleared ✓</div>
+        <div style="color:#30d158">[01:23:56] [Pipeline] VFS initialized ✓</div>
+        <div style="color:#8e8e93">[01:23:56] [Pipeline] SpringBoard proc resolved: 0xfffff00030b00000</div>
+        <div style="color:#0a84ff;font-weight:600">[01:23:56] [Pipeline] System ready — full access granted ✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 12. ABOUT ============ -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="screen-label">About</div>
+    <div class="screen">
+      <div class="flex-r gap-8" style="padding:10px 16px">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span style="flex:1;text-align:center;font-size:17px;font-weight:600;color:#f5f5f7">About</span>
+        <span style="width:24px"></span>
+      </div>
+      <div class="t-center px-20 mt-12">
+        <div class="gicon gicon-xxl g-blue-purple shadow-blue" style="margin:0 auto">
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="fs-20 fw-7 text-white mt-12">TrollStore DarkSword</div>
+        <div class="fs-15 text-sec mt-4">v1.0</div>
+      </div>
+
+      <div class="sec-header">Info</div>
+      <div class="glass" style="margin:0 16px">
+        <div class="glass-row"><span class="fs-15 text-sec">Version</span><span class="fs-15 text-white">1.0</span></div>
+        <div class="glass-row"><span class="fs-15 text-sec">Device</span><span class="fs-15 text-white">iPhone15,2</span></div>
+        <div class="glass-row"><span class="fs-15 text-sec">iOS</span><span class="fs-15 text-white">18.3.1</span></div>
+        <div class="glass-row"><span class="fs-15 text-sec">Chip</span><span class="fs-15 text-white">A16</span></div>
+        <div class="glass-row"><span class="fs-15 text-sec">PAC</span><span class="text-green fw-6">Yes</span></div>
+        <div class="glass-row"><span class="fs-15 text-sec">Exploit</span><span class="fs-15 text-white">DarkSword</span></div>
+      </div>
+
+      <div class="sec-header">Credits</div>
+      <div class="glass" style="margin:0 16px">
+        <div style="padding:14px 16px;border-bottom:0.5px solid rgba(255,255,255,0.04)"><span class="fs-15 text-white">DarkSword</span><span class="fs-15 text-sec" style="float:right">rooootdev</span></div>
+        <div style="padding:14px 16px;border-bottom:0.5px solid rgba(255,255,255,0.04)"><span class="fs-15 text-white">ChOma</span><span class="fs-15 text-sec" style="float:right">khanhduytran0</span></div>
+        <div style="padding:14px 16px;border-bottom:0.5px solid rgba(255,255,255,0.04)"><span class="fs-15 text-white">XPF (Fugu14)</span><span class="fs-15 text-sec" style="float:right">Linus Henze</span></div>
+        <div style="padding:14px 16px"><span class="fs-15 text-white">RemoteCall</span><span class="fs-15 text-sec" style="float:right">LARA</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

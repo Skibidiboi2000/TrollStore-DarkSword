@@ -46,4 +46,49 @@ public final class PersistenceService: @unchecked Sendable {
             saveInstalledApps(apps)
         }
     }
+
+    /// Scan /Applications/ for .app bundles not yet tracked and merge them in.
+    /// Returns the merged list.
+    @discardableResult
+    public func rescanApplicationsDirectory() -> [InstalledApp] {
+        lock.withLock {
+            let fm = fileManager
+            var apps = loadInstalledApps()
+            let existingIDs = Set(apps.map(\.bundleID))
+
+            guard let contents = try? fm.contentsOfDirectory(atPath: "/Applications/") else { return apps }
+            let appBundles = contents.filter { $0.hasSuffix(".app") }
+
+            for bundleName in appBundles {
+                let bundlePath = "/Applications/\(bundleName)"
+                let infoPlistURL = URL(fileURLWithPath: bundlePath).appendingPathComponent("Info.plist")
+                guard let infoData = try? Data(contentsOf: infoPlistURL),
+                      let info = try? PropertyListSerialization.propertyList(from: infoData, format: nil) as? [String: Any],
+                      let bundleID = info["CFBundleIdentifier"] as? String,
+                      !existingIDs.contains(bundleID) else { continue }
+
+                let name = info["CFBundleDisplayName"] as? String
+                    ?? info["CFBundleName"] as? String
+                    ?? bundleName.replacingOccurrences(of: ".app", with: "")
+                let version = info["CFBundleVersion"] as? String
+                    ?? info["CFBundleShortVersionString"] as? String
+                    ?? "1.0"
+                let executable = info["CFBundleExecutable"] as? String ?? ""
+                let installDate = (try? fm.attributesOfItem(atPath: bundlePath)[.modificationDate] as? Date) ?? Date()
+
+                let app = InstalledApp(
+                    name: name,
+                    bundleID: bundleID,
+                    version: version,
+                    installDate: installDate,
+                    path: bundlePath,
+                    iconPath: nil,
+                    executableName: executable
+                )
+                apps.append(app)
+                saveInstalledApps(apps)
+            }
+            return apps
+        }
+    }
 }
