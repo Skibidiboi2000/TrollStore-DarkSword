@@ -2,7 +2,7 @@
 
 Unsigned IPA installer for iOS 17.0 – 26.0.1, powered by the DarkSword kernel exploit. Works on iPhone 7–16 and select iPads.
 
-> **Note:** This project has **not been tested on a real device** — the development device (iPad 9th gen) only has 3 GB of RAM, which is insufficient for DarkSword's heap spray requirements. Testing on a device with ≥6 GB RAM is still needed.
+> **Note:** This project has **not been tested on a real device** — My device (iPad 9th gen) only has 3 GB of RAM, which is insufficient for DarkSword's heap spray requirements. Testing on a device with ≥6 GB RAM is still needed.
 
 ## Quick Start
 
