@@ -33,6 +33,7 @@ let package = Package(
                 "Core/Model/ExploitState.swift",
                 "Core/Model/DeviceInfo.swift",
                 "Core/Model/InstalledApp.swift",
+                "Core/Model/ActivityEntry.swift",
                 "Core/Install/IPAParser.swift",
                 "Core/Exploit/KernelRwHandle.swift",
                 "Core/Exploit/DarkSwordExploit.swift",
@@ -58,6 +59,10 @@ let package = Package(
                 "UI/Views/AppDetailView.swift",
                 "UI/Views/InstallView.swift",
                 "UI/Views/SettingsView.swift",
+                "UI/Views/HomeView.swift",
+                "UI/Views/ActivityView.swift",
+                "UI/Views/LogDetailView.swift",
+                "UI/Views/AboutView.swift",
 "UI/Style/AppTheme.swift",
 
                 // Vendored C/ObjC sources (needed for SPM builds)

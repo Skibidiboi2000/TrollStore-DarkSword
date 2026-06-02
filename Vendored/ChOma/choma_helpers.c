@@ -1344,5 +1344,7 @@ uint64_t choma_find_dev_mode_status_direct(void)
 // ---------------------------------------------------------------------------
 extern uint32_t off_proc_p_pid;
 extern uint32_t off_proc_p_list_le_next;
+extern uint32_t off_inpcb_inp_depend6_inp6_icmp6filt;
 uint32_t get_off_proc_p_pid(void) { return off_proc_p_pid; }
 uint32_t get_off_proc_p_list_le_next(void) { return off_proc_p_list_le_next; }
+uint32_t get_off_inpcb_inp_depend6_inp6_icmp6filt(void) { return off_inpcb_inp_depend6_inp6_icmp6filt; }

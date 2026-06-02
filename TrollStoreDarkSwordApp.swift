@@ -25,58 +25,88 @@ struct ContentView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
             switch coordinator.appState {
             case .sandboxed:
                 ExploitView()
-                    .transition(AppTheme.springTransition)
+                    .transition(.opacity)
 
             case .obtainingOffsets, .exploiting:
                 ExploitProgressView()
-                    .transition(AppTheme.springTransition)
+                    .transition(.opacity)
 
             case .exploitFailed(let reason):
-                VStack(spacing: 16) {
-                    Text(coordinator.deviceInfo.isSupported ? "Exploit Failed" : "Unsupported Device")
-                        .font(.title)
-                        .foregroundColor(.red)
-                    Text(reason)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                    if coordinator.deviceInfo.isSupported {
-                        Button("Retry") {
-                            coordinator.appState = .sandboxed
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 20) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(AppTheme.failureColor)
+                        Text(coordinator.deviceInfo.isSupported ? "Exploit Failed" : "Unsupported Device")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text(reason)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        if coordinator.deviceInfo.isSupported {
+                            Button("Try Again") {
+                                coordinator.appState = .sandboxed
+                            }
+                            .buttonStyle(.plain)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(AppTheme.cardBackground)
+                            .foregroundColor(AppTheme.accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
-                        .buttonStyle(.borderedProminent)
                     }
+                    .padding(24)
                 }
-                .padding()
-                .transition(AppTheme.springTransition)
+                .transition(.opacity)
 
             case .patched:
                 if viewModel.currentStage == .complete && !coordinator.hasSeenSuccess {
                     ExploitSuccessView()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                            removal: .opacity.combined(with: .move(edge: .bottom))
-                        ))
+                        .transition(.opacity)
                 } else {
                     PatchedView()
                         .transition(.opacity)
                 }
 
             case .panicRecovery:
-                VStack(spacing: 16) {
-                    Text("Panic Detected")
-                        .font(.title)
-                    Text("The device may have panicked. If it rebooted, re-launch the app.")
-                    Button("OK") {
-                        coordinator.acknowledgePanic()
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(AppTheme.orangeAccent)
+                        Text("Panic Detected")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("The device may have panicked. If it rebooted, re-launch the app.")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("OK") {
+                            coordinator.acknowledgePanic()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 12)
+                        .background(AppTheme.orangeAccent)
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
+                    .padding(24)
                 }
-                .padding()
+                .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: coordinator.appState)
+        .animation(.default, value: coordinator.appState)
     }
 }

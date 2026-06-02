@@ -42,15 +42,30 @@ public final class RemoteCallEngine: @unchecked Sendable {
     ///   1. Cached proc address (from post-exploit page-scan or from safe list walk
     ///      in find_process_via_proc_name) — zero krw for process lookup, immune to
     ///      DarkSword proc-list corruption.
-    ///   2. find_process_via_proc_name which caches the proc address when found via
+    ///   2. proc_find_by_page_scan — linear kernel page scan at 0x40 stride, never
+    ///      follows le_next/le_prev. Validates BOTH p_pid AND p_name per candidate.
+    ///      Immune to DarkSword linked-list corruption and false PID matches.
+    ///   3. find_process_via_proc_name which caches the proc address when found via
     ///      name-based safe list walk (avoids false-positive PID matches).
-    ///   3. PID-based RemoteCall as last resort (uses safe_procbypid which can return
+    ///   4. PID-based RemoteCall as last resort (uses safe_procbypid which can return
     ///      false-positive matches from DarkSword p_pid corruption).
     public func connectToProcess(named name: String) throws -> RemoteCall {
-        // Try cached proc address first (set by Step 6 in handleExploitSuccess).
+        // Step 1: Cached proc address (set by Step 6 in handleExploitSuccess).
         if let rc = cachedRemoteCall(for: name) { return rc }
 
-        // Fallback: find process by name. The C function caches the verified
+        // Step 2: Page-scan fallback — scans kernel pages at 0x40 stride, never
+        // follows le_next/le_prev. Validates both p_pid AND p_name per candidate.
+        // Immune to DarkSword proc-list corruption (0x40-byte write cannot span
+        // both p_pid and p_name offsets on the same struct).
+        // Runs BEFORE find_process_via_proc_name to prevent list-walk-based
+        // cache overwrites from corrupting the cached address.
+        let pageScanAddr = proc_find_by_page_scan(name)
+        if pageScanAddr > 0 {
+            save_cached_proc_addr(name, pageScanAddr)
+            if let rc = cachedRemoteCall(for: name) { return rc }
+        }
+
+        // Step 3: find process by name. The C function caches the verified
         // proc address via save_cached_proc_addr when it finds by name.
         guard let pid = findProcess(named: name) else {
             throw RemoteCallError.targetNotFound(name)
@@ -60,7 +75,7 @@ public final class RemoteCallEngine: @unchecked Sendable {
         // via safe_find_proc_by_name (by name, immune to false PID matches).
         if let rc = cachedRemoteCall(for: name) { return rc }
 
-        // Last resort: PID-based init with safe_procbypid.
+        // Step 4: PID-based init with safe_procbypid.
         // Has false-positive risk from DarkSword p_pid corruption.
         guard let rc = RemoteCall(pid: pid, useMigFilterBypass: true) else {
             throw RemoteCallError.initFailed(name)

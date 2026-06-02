@@ -37,3 +37,4 @@ void choma_search_substr(PFSection *section, const char *substr, void (^matchBlo
 // Swift 6 concurrency-safe accessors for offsets_init() globals
 uint32_t get_off_proc_p_pid(void);
 uint32_t get_off_proc_p_list_le_next(void);
+uint32_t get_off_inpcb_inp_depend6_inp6_icmp6filt(void);

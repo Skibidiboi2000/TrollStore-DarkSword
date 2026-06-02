@@ -4,24 +4,54 @@ struct PatchedView: View {
     @EnvironmentObject private var coordinator: ContentCoordinator
 
     var body: some View {
-        TabView(selection: $coordinator.selectedTab) {
-            AppGridView()
-                .tabItem {
-                    Label("Apps", systemImage: "square.grid.3x3")
+        VStack(spacing: 0) {
+            // Tab content
+            ZStack {
+                switch coordinator.selectedTab {
+                case .home:
+                    HomeView()
+                case .apps:
+                    AppGridView()
+                case .install:
+                    InstallView()
+                case .activity:
+                    ActivityView()
+                case .settings:
+                    SettingsView()
                 }
-                .tag(ContentCoordinator.Tab.apps)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            InstallView()
-                .tabItem {
-                    Label("Install", systemImage: "tray.and.arrow.down")
-                }
-                .tag(ContentCoordinator.Tab.install)
+            // Custom tab bar
+            tabBar
+        }
+    }
 
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.2")
+    private var tabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(ContentCoordinator.Tab.allCases, id: \.self) { tab in
+                Button {
+                    coordinator.selectedTab = tab
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: tab.systemImage)
+                            .font(.system(size: 22))
+                        Text(tab.label)
+                            .font(.system(size: 10))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(coordinator.selectedTab == tab ? AppTheme.accentColor : AppTheme.labelTertiary)
                 }
-                .tag(ContentCoordinator.Tab.settings)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .background(AppTheme.tabBarBackground)
+        .background(Material.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            AppTheme.separatorColor.opacity(0.24)
+                .frame(height: 0.5)
         }
     }
 }

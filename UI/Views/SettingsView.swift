@@ -3,127 +3,72 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var coordinator: ContentCoordinator
     @AppStorage("darkMode") private var isDarkMode = false
-    @State private var exportError: String?
-    @State private var exportData: Data?
     @State private var confirmUninstallAll = false
+    @State private var icmp6filtOffsetText: String
+
+    init() {
+        let stored = UserDefaults.standard.object(forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt") as? UInt32 ?? 0x148
+        _icmp6filtOffsetText = State(initialValue: "0x" + String(stored, radix: 16))
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                // MARK: - Kernel
-                Section {
-                    Button(action: rePatchKernel) {
-                        Label {
-                            Text("Re-patch Kernel")
-                        } icon: {
-                            settingsIcon(systemName: "bolt.shield.fill", color: .blue)
-                        }
-                    }
+            ScrollView {
+                VStack(spacing: 0) {
+                    Text("Settings")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
 
-                    Button(action: { Task { await reregisterAll() } }) {
-                        Label {
-                            Text("Re-register All Apps")
-                        } icon: {
-                            settingsIcon(systemName: "arrow.triangle.2.circlepath", color: .purple)
-                        }
-                    }
+                    // Kernel
+                    AppTheme.sectionHeader("Kernel")
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Button(action: { Task { await rescanApps() } }) {
-                        Label {
-                            Text("Rescan Installed Apps")
-                        } icon: {
-                            settingsIcon(systemName: "magnifyingglass.circle", color: .blue)
-                        }
-                    }
-                } header: {
-                    Text("Kernel")
-                }
+                    kernelSection
+                        .padding(.horizontal, 20)
 
-                // MARK: - General
-                Section {
-                    HStack {
-                        Label {
-                            Text("Dark Mode")
-                        } icon: {
-                            settingsIcon(systemName: "moon.fill", color: .purple)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $isDarkMode)
-                            .labelsHidden()
-                    }
+                    // General
+                    AppTheme.sectionHeader("General")
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack {
-                        Label {
-                            Text("Persist Installation")
-                        } icon: {
-                            settingsIcon(systemName: "square.and.arrow.down", color: .orange)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $coordinator.persistInstallation)
-                            .labelsHidden()
-                    }
-                } header: {
-                    Text("General")
-                }
+                    generalSection
+                        .padding(.horizontal, 20)
 
-                // MARK: - Data
-                Section {
-                    if let exportError {
-                        Label(exportError, systemImage: "exclamationmark.triangle")
-                            .foregroundColor(.red)
-                    }
-                    if let exportData {
-                        ShareLink(item: exportData, preview: .init("Installed Apps")) {
-                            Label {
-                                Text("Export App List")
-                            } icon: {
-                                settingsIcon(systemName: "square.and.arrow.up", color: .green)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Data")
-                }
-                .task {
-                    guard exportData == nil else { return }
-                    do {
-                        exportData = try JSONEncoder().encode(PersistenceService().loadInstalledApps())
-                    } catch {
-                        exportError = "Export failed: \(error.localizedDescription)"
-                    }
-                }
+                    // Data
+                    AppTheme.sectionHeader("Data")
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                // MARK: - Diagnostics
-                Section {
-                    NavigationLink(destination: ExploitLogView()) {
-                        Label {
-                            Text("Exploit Log")
-                        } icon: {
-                            settingsIcon(systemName: "list.bullet.rectangle", color: .gray)
-                        }
-                    }
+                    dataSection
+                        .padding(.horizontal, 20)
 
-                    NavigationLink(destination: AboutView()) {
-                        Label {
-                            Text("About")
-                        } icon: {
-                            settingsIcon(systemName: "info.circle", color: .blue)
-                        }
-                    }
-                } header: {
-                    Text("Diagnostics")
-                }
+                    // Offsets
+                    AppTheme.sectionHeader("Offsets")
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                // MARK: - Danger Zone
-                Section {
-                    Button(role: .destructive, action: { confirmUninstallAll = true }) {
-                        Label("Uninstall All Apps", systemImage: "trash")
-                    }
-                } header: {
-                    Text("Danger Zone")
+                    offsetsSection
+                        .padding(.horizontal, 20)
+
+                    // Diagnostics
+                    AppTheme.sectionHeader("Diagnostics")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    diagnosticsSection
+                        .padding(.horizontal, 20)
+
+                    // Danger Zone
+                    AppTheme.sectionHeader("Danger Zone")
+                        .foregroundColor(AppTheme.failureColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    dangerSection
+                        .padding(.horizontal, 20)
+
+                    Color.clear.frame(height: 20)
                 }
             }
-            .navigationTitle("Settings")
+            .navigationBarHidden(true)
         }
         .alert("Uninstall All Apps?", isPresented: $confirmUninstallAll) {
             Button("Cancel", role: .cancel) {}
@@ -135,18 +80,156 @@ struct SettingsView: View {
         }
     }
 
-    private func settingsIcon(systemName: String, color: Color) -> some View {
-        RoundedRectangle(cornerRadius: 7)
-            .fill(color)
-            .frame(width: 28, height: 28)
-            .overlay(
-                Image(systemName: systemName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+    // MARK: - Kernel Section
+
+    private var kernelSection: some View {
+        VStack(spacing: 0) {
+            SettingsActionRow(icon: "lock.shield.fill", color: AppTheme.accentColor, title: "Re-patch Kernel") {
+                rePatchKernel()
+            }
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
+            SettingsActionRow(icon: "arrow.triangle.2.circlepath", color: AppTheme.purpleAccent, title: "Re-register All Apps") {
+                Task { await reregisterAll() }
+            }
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
+            SettingsActionRow(icon: "magnifyingglass.circle.fill", color: AppTheme.accentColor, title: "Rescan Installed Apps") {
+                Task { await rescanApps() }
+            }
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    // MARK: - General Section
+
+    private var generalSection: some View {
+        VStack(spacing: 0) {
+            SettingsToggleRow(
+                icon: "moon.fill", color: AppTheme.purpleAccent,
+                title: "Dark Mode",
+                isOn: $isDarkMode
             )
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
+            SettingsToggleRow(
+                icon: "arrow.down.to.line", color: AppTheme.orangeAccent,
+                title: "Persist Installation",
+                isOn: Binding(
+                    get: { coordinator.persistInstallation },
+                    set: { coordinator.persistInstallation = $0 }
+                )
+            )
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    // MARK: - Data Section
+
+    private var dataSection: some View {
+        VStack(spacing: 0) {
+            SettingsActionRow(icon: "square.and.arrow.up.fill", color: AppTheme.successColor, title: "Export App List") {
+                exportAppList()
+            }
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    // MARK: - Offsets Section
+
+    private var offsetsSection: some View {
+        VStack(spacing: 0) {
+            DisclosureGroup("Modify Offsets") {
+                HStack {
+                    Text("icmp6_filter offset")
+                    Spacer()
+                    TextField("0x148", text: $icmp6filtOffsetText)
+                        .font(.system(.body, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                        .onSubmit {
+                            saveOffsetOverride()
+                        }
+                }
+                .padding(.trailing, 8)
+                Text("Restart exploit after changing")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    // MARK: - Diagnostics Section
+
+    private var diagnosticsSection: some View {
+        VStack(spacing: 0) {
+            NavigationLink(destination: LogDetailView(log: coordinator.exploitLog)) {
+                SettingsChevronRow(icon: "list.bullet.rectangle.fill", color: .gray, title: "Exploit Log")
+            }
+            .buttonStyle(.plain)
+
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
+            NavigationLink(destination: AboutView()) {
+                SettingsChevronRow(icon: "info.circle.fill", color: AppTheme.accentColor, title: "About")
+            }
+            .buttonStyle(.plain)
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    // MARK: - Danger Zone
+
+    private var dangerSection: some View {
+        VStack(spacing: 0) {
+            Button(action: { confirmUninstallAll = true }) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(AppTheme.failureColor)
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                        )
+                    Text("Uninstall All Apps")
+                        .font(.body)
+                        .foregroundColor(AppTheme.failureColor)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+            }
+        }
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
+                .stroke(AppTheme.failureColor.opacity(0.1), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Actions
+
+    private func saveOffsetOverride() {
+        let cleaned = icmp6filtOffsetText
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "0x", with: "")
+        guard let value = UInt32(cleaned, radix: 16) else {
+            LogManager.shared.append("Invalid offset value: \(icmp6filtOffsetText)", tag: "Settings")
+            return
+        }
+        UserDefaults.standard.set(value, forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt")
+        LogManager.shared.append("icmp6_filter offset set to 0x\(String(value, radix: 16))", tag: "Settings")
+    }
 
     private func rePatchKernel() {
         guard let handle = coordinator.kernelHandle, ds_is_ready() else {
@@ -189,6 +272,15 @@ struct SettingsView: View {
         LogManager.shared.append("Rescanned /Applications/ — \(count) apps tracked", tag: "Settings")
     }
 
+    private func exportAppList() {
+        do {
+            let data = try JSONEncoder().encode(PersistenceService().loadInstalledApps())
+            LogManager.shared.append("Exported \(data.count) bytes", tag: "Settings")
+        } catch {
+            LogManager.shared.append("Export failed: \(error.localizedDescription)", tag: "Settings")
+        }
+    }
+
     private func uninstallAll() async {
         guard let handle = coordinator.kernelHandle, ds_is_ready() else {
             LogManager.shared.append("No valid kernel handle — re-run exploit first", tag: "Settings")
@@ -215,66 +307,91 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Exploit Log View
+// MARK: - Reusable Settings Row Components
 
-struct ExploitLogView: View {
-    @EnvironmentObject private var coordinator: ContentCoordinator
+private struct SettingsActionRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let action: () -> Void
 
     var body: some View {
-        ScrollView {
-            if coordinator.exploitLog.isEmpty {
-                ContentUnavailableView(
-                    "No Log Entries",
-                    systemImage: "doc.text",
-                    description: Text("Run the exploit to generate log entries.")
-                )
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(coordinator.exploitLog.enumerated()), id: \.offset) { _, entry in
-                        Text(entry)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontDesign(.monospaced)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+        Button(action: action) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(color)
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                    )
+                Text(title)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                Spacer()
             }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .navigationTitle("Exploit Log")
-        .toolbar {
-            if let logURL = LogManager.shared.currentLogURL {
-                ShareLink(item: logURL, preview: SharePreview("Exploit Log")) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-            }
-        }
+        .buttonStyle(.plain)
     }
 }
 
-// MARK: - About View
-
-struct AboutView: View {
-    private let device = DeviceInfo.current
+private struct SettingsToggleRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    @Binding var isOn: Bool
 
     var body: some View {
-        List {
-            Section {
-                LabeledContent("Version", value: "1.0")
-                LabeledContent("Device", value: device.modelIdentifier)
-                LabeledContent("iOS", value: device.systemVersion)
-                LabeledContent("Chip", value: device.cpuFamilyName)
-                LabeledContent("PAC", value: device.isPACSupported ? "Yes" : "No")
-                LabeledContent("Exploit", value: "DarkSword")
-            }
-
-            Section("Credits") {
-                Text("DarkSword by rooootdev")
-                Text("ChOma by khanhduytran0")
-                Text("XPF from Fugu14 by Linus Henze")
-                Text("RemoteCall pattern from LARA")
-            }
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(color)
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                )
+            Text(title)
+                .font(.body)
+                .foregroundColor(.primary)
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(AppTheme.successColor)
         }
-        .navigationTitle("About")
+        .padding(.horizontal, 16)
+        .frame(minHeight: 44)
+    }
+}
+
+private struct SettingsChevronRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(color)
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                )
+            Text(title)
+                .font(.body)
+                .foregroundColor(.primary)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(AppTheme.labelTertiary)
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 44)
     }
 }

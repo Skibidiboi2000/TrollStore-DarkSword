@@ -15,13 +15,37 @@ public final class ContentCoordinator: ObservableObject {
     @Published public var persistInstallation = true
     /// Tracks if the user has dismissed the exploit success screen.
     @Published public var hasSeenSuccess = false
-    @Published public var selectedTab: Tab = .apps
+    @Published public var selectedTab: Tab = .home
 
     public enum Tab: Int, CaseIterable {
-        case apps = 0
-        case install = 1
-        case settings = 2
+        case home = 0
+        case apps = 1
+        case install = 2
+        case activity = 3
+        case settings = 4
+
+        public var label: String {
+            switch self {
+            case .home: return "Home"
+            case .apps: return "Apps"
+            case .install: return "Install"
+            case .activity: return "Activity"
+            case .settings: return "Settings"
+            }
+        }
+
+        public var systemImage: String {
+            switch self {
+            case .home: return "house.fill"
+            case .apps: return "square.grid.2x2"
+            case .install: return "arrow.down.to.line"
+            case .activity: return "chart.xyaxis.line"
+            case .settings: return "gearshape.fill"
+            }
+        }
     }
+
+    @Published public var activityEntries: [ActivityEntry] = []
 
     public lazy var exploitViewModel = ExploitViewModel(coordinator: self)
 
@@ -43,6 +67,14 @@ public final class ContentCoordinator: ObservableObject {
         exploitLog.append(message)
         exploitViewModel.logEntries.append("[\(Date().formatted(date: .omitted, time: .standard))] \(message)")
         LogManager.shared.append(message, tag: "Pipeline")
+        appendActivity(ActivityEntry(message: message, type: .info))
+    }
+
+    public func appendActivity(_ entry: ActivityEntry) {
+        activityEntries.insert(entry, at: 0)
+        if activityEntries.count > 50 {
+            activityEntries = Array(activityEntries.prefix(50))
+        }
     }
 
     public func startPipeline() {
@@ -81,6 +113,15 @@ public final class ContentCoordinator: ObservableObject {
                 if ok {
                     self.exploitViewModel.currentStage = .runningXPF
                     self.appendLog("Offsets resolved — starting exploit")
+
+                    // Validate critical struct offsets before running exploit
+                    if !XPFWrapper.validateCriticalOffsets() {
+                        self.appendLog("WARNING: icmp6_filter offset may be wrong for this build")
+                        self.appendLog("If the exploit hangs, try setting a custom offset in Settings \u{2192} Modify Offsets")
+                        LogManager.shared.append("WARNING: icmp6_filter offset may be wrong for this build", tag: "Pipeline")
+                        LogManager.shared.append("If the exploit hangs, try setting a custom offset in Settings \u{2192} Modify Offsets", tag: "Pipeline")
+                    }
+
                     self.appState = .exploiting
                     self.exploitViewModel.continueExploit()
                 } else {
@@ -103,7 +144,14 @@ public final class ContentCoordinator: ObservableObject {
         // steps complete. If the kernel panics during patching/offsets/sandbox-escape,
         // the next launch detects it via .panicRecovery. Cleared on final success below.
         kernelHandle = handle
+        appendActivity(ActivityEntry(message: "Kernel r/w established", type: .success))
         appendLog("Kernel r/w established — resolving kernel base...")
+
+        // Socket recreation check
+        if !ds_sockets_recreated() {
+            appendLog("WARNING: krw sockets were NOT recreated — old corrupted sockets in use")
+            appendLog("Kernel panic likely on next ICMPv6 setsockopt/getsockopt")
+        }
 
         // Step 1: Resolve kernel base via XPF (BEFORE offsets_init, which
         // destroys XPF). Both applyAll() and findKernelBase() need gXPF alive.
@@ -125,6 +173,7 @@ public final class ContentCoordinator: ObservableObject {
             handleExploitFailure("Kernel patching failed — invalid kernel base")
             return
         }
+        appendActivity(ActivityEntry(message: "Kernel patches applied", type: .success))
         print("[D] patcher.applyAll SUCCEEDED")
 
         // Also zero mac_proc_enforce as a complementary AMFI bypass.
@@ -148,6 +197,12 @@ public final class ContentCoordinator: ObservableObject {
         // Step 3: Initialize kernel structure offsets for post-exploit C modules
         // (sbx, vfs, vnode, RemoteCall). offsets_init calls xpf_stop() internally,
         // destroying gXPF, but we no longer need XPF after this point.
+        //
+        // NOTE: offsets_init() was ALREADY called inside pe_v1()/pe_a18() during
+        // ds_run() to resolve socket struct offsets before they're needed by
+        // krw_sockets_leak_forever. This second call re-runs loadalloffsets()
+        // which applies any NSUserDefaults overrides the user may have set —
+        // so it's intentional, not a duplicate.
         appendLog("Patches applied — initializing post-exploit offsets...")
         offsets_init()
         // offsets_init calls xpf_stop() internally, destroying gXPF.
@@ -178,12 +233,24 @@ public final class ContentCoordinator: ObservableObject {
             handleExploitFailure("Sandbox escape failed")
             return
         }
+        appendActivity(ActivityEntry(message: "Sandbox escaped", type: .success))
+
+        // Developer mode detection for diagnostics (iOS 16+)
+        var devModeEnabled: Int = 0
+        var size = MemoryLayout<Int>.size
+        let result = sysctlbyname("kern.developermode.status", &devModeEnabled, &size, nil, 0)
+        if result == 0 {
+            appendLog("Developer mode: \(devModeEnabled > 0 ? "enabled" : "disabled")")
+        } else {
+            appendLog("Developer mode: could not query (sysctl returned \(result))")
+        }
 
         // Step 5: VFS init (needs offsets from step 3)
         guard VirtualFileSystem.initialize() else {
             handleExploitFailure("VFS init failed")
             return
         }
+        appendActivity(ActivityEntry(message: "VFS initialized — system ready", type: .success))
 
         // Step 6: Resolve SpringBoard proc address for krw-free RemoteCall init.
         // The DarkSword race corrupts 0x40 bytes of random proc structs, including
@@ -239,6 +306,7 @@ public final class ContentCoordinator: ObservableObject {
         appState = .exploitFailed(reason)
         exploitViewModel.isRunning = false
         exploitViewModel.currentStage = .failed
+        appendActivity(ActivityEntry(message: "Exploit failed: \(reason)", type: .error))
         appendLog("FAILED: \(reason)")
     }
 

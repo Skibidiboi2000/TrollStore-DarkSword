@@ -7,7 +7,6 @@ struct InstallView: View {
     @State private var showFilePicker = false
     @State private var filePickerError: String?
     @State private var installStatus: InstallStatus = .idle
-    @State private var installProgress: Double = 0.0
     @State private var installError: String?
     @State private var persistence = PersistenceService()
 
@@ -31,17 +30,16 @@ struct InstallView: View {
 
     var body: some View {
         NavigationStack {
-            if coordinator.kernelHandle == nil {
-                notReadyView
-            } else if installStatus == .idle {
-                idleView
-            } else {
-                progressView
+            Group {
+                if coordinator.kernelHandle == nil {
+                    notReadyView
+                } else if installStatus == .idle {
+                    idleView
+                } else {
+                    progressView
+                }
             }
         }
-        // A UIViewControllerRepresentable wrapper used INSTEAD of .fileImporter to
-        // avoid the iOS 17+ TabView callback bug.  Using asCopy: true so the file is
-        // an app-owned copy with no security-scoping needed.
         .overlay(
             DocumentPickerView(
                 isPresented: $isDocumentPickerPresented,
@@ -50,22 +48,22 @@ struct InstallView: View {
             .allowsHitTesting(false)
             .frame(width: 0, height: 0)
         )
-        .onChange(of: showFilePicker) { newValue in
-            if newValue {
+        .onChange(of: showFilePicker) { _ in
+            if showFilePicker {
                 isDocumentPickerPresented = true
                 showFilePicker = false
             }
         }
-        .onChange(of: coordinator.pendingIPAURL) { url in
-            guard let url else { return }
+        .onChange(of: coordinator.pendingIPAURL) { _ in
+            guard let url = coordinator.pendingIPAURL else { return }
             Task { await startInstall(url: url); coordinator.pendingIPAURL = nil }
         }
-        .onChange(of: coordinator.kernelHandle) { newHandle in
-            guard let newHandle, installer == nil else { return }
-            buildInstaller(handle: newHandle)
+        .onChange(of: coordinator.kernelHandle) { _ in
+            guard let handle = coordinator.kernelHandle, installer == nil else { return }
+            buildInstaller(handle: handle)
         }
-        .onChange(of: coordinator.importError) { error in
-            guard let error else { return }
+        .onChange(of: coordinator.importError) { _ in
+            guard let error = coordinator.importError else { return }
             installError = error
             installStatus = .failed(error)
         }
@@ -79,138 +77,151 @@ struct InstallView: View {
     // MARK: - Not Ready
 
     private var notReadyView: some View {
-        ContentUnavailableView(
-            "No Kernel Access",
-            systemImage: "lock.shield.fill",
-            description: Text("Run the exploit first to enable installation.")
-        )
-        .navigationTitle("Install")
+        VStack(spacing: 12) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 36))
+                .foregroundColor(AppTheme.labelTertiary)
+            Text("No Kernel Access")
+                .font(.headline)
+                .foregroundColor(AppTheme.labelSecondary)
+            Text("Run the exploit first to enable installation.")
+                .font(.body)
+                .foregroundColor(AppTheme.labelTertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Idle View
 
     private var idleView: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                Spacer().frame(height: 40)
+            VStack(spacing: 0) {
+                Text("Install")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
 
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(AppTheme.accentGradient)
-                    .frame(width: 80, height: 80)
-                    .shadow(color: .blue.opacity(0.3), radius: 16, y: 8)
-                    .overlay(
-                        Image(systemName: "tray.and.arrow.down")
-                            .font(.system(size: 36))
-                            .foregroundColor(.white)
-                    )
-
-                VStack(spacing: 6) {
-                    Text("Install IPA")
-                        .font(.title)
-                        .fontWeight(.bold)
-
-                    Text("Import an IPA file to install it\nwith full entitlements.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
-                }
-
+                // IPA Import Button
                 Button(action: { showFilePicker = true }) {
                     HStack(spacing: 8) {
                         Image(systemName: "doc.badge.plus")
+                            .font(.body)
                         Text("Select IPA File")
+                            .font(.headline)
                             .fontWeight(.semibold)
                     }
-                    .frame(maxWidth: 280)
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
+                    .background(AppTheme.accentColor)
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
 
                 if let error = filePickerError {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .foregroundColor(.red)
-                        .font(.caption)
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.caption)
+                        Text(error)
+                            .font(.caption)
+                    }
+                    .foregroundColor(AppTheme.failureColor)
+                    .padding(.top, 8)
                 }
 
+                // Recent Installs
+                AppTheme.sectionHeader("Recently Installed")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 recentInstallsSection
-                Spacer()
+                    .padding(.horizontal, 20)
+
+                Color.clear.frame(height: 20)
             }
-            .padding(.horizontal, 24)
         }
-        .navigationTitle("Install")
-        .scrollIndicators(.hidden)
     }
 
     // MARK: - Recently Installed
 
     private var recentInstallsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recently Installed")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 4)
+        let recent = persistence.loadInstalledApps()
+            .sorted { $0.installDate > $1.installDate }
+            .prefix(3)
 
-            let recent = persistence.loadInstalledApps()
-                .sorted { $0.installDate > $1.installDate }
-                .prefix(3)
-
+        return Group {
             if recent.isEmpty {
                 HStack {
                     Text("No recent installs")
-                        .font(.subheadline)
-                        .foregroundColor(Color(.tertiaryLabel))
+                        .font(.body)
+                        .foregroundColor(AppTheme.labelTertiary)
                     Spacer()
                 }
                 .padding(16)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(recent.enumerated()), id: \.offset) { _, app in
-                        HStack(spacing: 12) {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(recentIconGradient(for: app))
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Image(systemName: "app.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                )
-
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(app.name)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Text(app.installDate, style: .relative)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        recentRow(app: app)
                         if app.bundleID != recent.last?.bundleID {
-                            Divider().padding(.leading, 12)
+                            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 68)
                         }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
             }
         }
-        .padding(.top, 16)
+    }
+
+    private func recentRow(app: InstalledApp) -> some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(recentIconGradient(for: app))
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Image(systemName: "app.fill")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(app.name)
+                    .font(.body)
+                    .fontWeight(.medium)
+                Text(app.installDate, style: .relative)
+                    .font(.caption)
+                    .foregroundColor(AppTheme.labelTertiary)
+            }
+
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(AppTheme.successColor)
+                .font(.caption)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private func recentIconGradient(for app: InstalledApp) -> LinearGradient {
         let gradients = [
-            LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
-            LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
-            LinearGradient(colors: [.green, .teal], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [
+                Color(red: 10/255, green: 77/255, blue: 153/255),
+                Color(red: 91/255, green: 26/255, blue: 153/255)
+            ], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [
+                Color(red: 255/255, green: 159/255, blue: 10/255),
+                Color(red: 255/255, green: 55/255, blue: 95/255)
+            ], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [
+                Color(red: 48/255, green: 209/255, blue: 88/255),
+                Color(red: 64/255, green: 200/255, blue: 224/255)
+            ], startPoint: .topLeading, endPoint: .bottomTrailing),
         ]
         return gradients[abs(app.bundleID.hashValue) % gradients.count]
     }
@@ -218,82 +229,108 @@ struct InstallView: View {
     // MARK: - Progress View
 
     private var progressView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            VStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .stroke(Color(.systemGray5), lineWidth: 4)
-                        .frame(width: 72, height: 72)
-
-                    Circle()
-                        .trim(from: 0, to: installProgress)
-                        .stroke(AppTheme.successGradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 72, height: 72)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeOut, value: installProgress)
-
-                    if installStatus == .complete {
-                        Image(systemName: "checkmark")
-                            .font(.title.bold())
-                            .foregroundColor(.green)
-                    }
-                }
-
-                Text(installStatusLabel)
-                    .font(.headline)
-            }
-
-            // Step indicators
+        ScrollView {
             VStack(spacing: 0) {
-                installStepRow(label: "Importing", stage: .importing("Importing IPA..."))
-                Divider()
-                installStepRow(label: "Parsing", stage: .parsing)
-                Divider()
-                installStepRow(label: "Injecting entitlements", stage: .injectingEntitlements)
-                Divider()
-                installStepRow(label: "Copying to /Applications/", stage: .copyingToApplications)
-                Divider()
-                installStepRow(label: "Registering with LaunchServices", stage: .registeringWithLaunchServices)
-            }
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
-            .padding(.horizontal, 32)
+                // Ring + Label
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .stroke(AppTheme.labelTertiary.opacity(0.24), lineWidth: 3.5)
+                            .frame(width: 60, height: 60)
 
-            if installStatus == .complete {
-                Button("Dismiss") {
-                    installStatus = .idle
-                    installProgress = 0.0
-                }
-                .buttonStyle(.bordered)
-            } else if case .failed(let reason) = installStatus {
-                VStack(spacing: 8) {
-                    Text(reason)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                        Circle()
+                            .trim(from: 0, to: 0.7)
+                            .stroke(AppTheme.accentColor, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                            .frame(width: 60, height: 60)
+                            .rotationEffect(.degrees(-90))
 
-                    HStack(spacing: 12) {
-                        Button("Try Again") {
-                            installStatus = .idle
-                            installProgress = 0.0
-                            installError = nil
-                        }
-                        .buttonStyle(.bordered)
-
-                        if let logURL = LogManager.shared.currentLogURL {
-                            ShareLink(item: logURL) {
-                                Label("Share Log", systemImage: "square.and.arrow.up")
-                            }
-                            .buttonStyle(.bordered)
+                        if installStatus == .complete {
+                            Image(systemName: "checkmark")
+                                .font(.title.bold())
+                                .foregroundColor(AppTheme.successColor)
                         }
                     }
-                }
-            }
 
-            Spacer()
+                    Text(installStatusLabel)
+                        .font(.headline)
+                }
+                .padding(.vertical, 16)
+
+                // Steps
+                AppTheme.sectionHeader("Steps")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(spacing: 0) {
+                    installStepRow(label: "Importing", stage: .importing(""))
+                    AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 46)
+                    installStepRow(label: "Parsing", stage: .parsing)
+                    AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 46)
+                    installStepRow(label: "Injecting entitlements", stage: .injectingEntitlements)
+                    AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 46)
+                    installStepRow(label: "Copying to /Applications/", stage: .copyingToApplications)
+                    AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 46)
+                    installStepRow(label: "Registering with LaunchServices", stage: .registeringWithLaunchServices)
+                }
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+                .padding(.horizontal, 20)
+
+                // Dismiss / Retry
+                if installStatus == .complete {
+                    Button("Dismiss") {
+                        installStatus = .idle
+                    }
+                    .buttonStyle(.plain)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: 200)
+                    .padding(.vertical, 12)
+                    .background(AppTheme.cardBackground)
+                    .foregroundColor(AppTheme.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.top, 20)
+                } else if case .failed(let reason) = installStatus {
+                    VStack(spacing: 12) {
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        HStack(spacing: 12) {
+                            Button("Try Again") {
+                                installStatus = .idle
+                                installError = nil
+                            }
+                            .buttonStyle(.plain)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 10)
+                            .background(AppTheme.cardBackground)
+                            .foregroundColor(AppTheme.accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                            if let logURL = LogManager.shared.currentLogURL {
+                                ShareLink(item: logURL) {
+                                    Label("Share Log", systemImage: "square.and.arrow.up")
+                                }
+                                .buttonStyle(.plain)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(AppTheme.cardBackground)
+                                .foregroundColor(AppTheme.accentColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+                    }
+                    .padding(.top, 20)
+                }
+
+                Color.clear.frame(height: 20)
+            }
         }
-        .navigationTitle("Installing")
     }
 
     private func installStepRow(label: String, stage: InstallStatus) -> some View {
@@ -301,35 +338,38 @@ struct InstallView: View {
             ZStack {
                 if isStageDone(stage) {
                     Circle()
-                        .fill(.green)
+                        .fill(AppTheme.successColor)
                         .frame(width: 22, height: 22)
                     Image(systemName: "checkmark")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
                 } else if isStageActive(stage) {
                     Circle()
-                        .fill(.blue)
+                        .fill(AppTheme.accentColor)
                         .frame(width: 22, height: 22)
-                        .shadow(color: .blue.opacity(0.3), radius: 4)
                     Circle()
-                        .fill(.white)
-                        .frame(width: 6, height: 6)
+                        .fill(Color.white)
+                        .frame(width: 7, height: 7)
                 } else {
                     Circle()
-                        .fill(Color(.systemGray4))
+                        .fill(AppTheme.labelTertiary.opacity(0.16))
                         .frame(width: 22, height: 22)
+                    Circle()
+                        .fill(AppTheme.labelTertiary.opacity(0.6))
+                        .frame(width: 7, height: 7)
                 }
             }
 
             Text(label)
-                .font(.subheadline)
+                .font(.body)
                 .foregroundColor(isStageDone(stage) ? .secondary : .primary)
 
             Spacer()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(isStageActive(stage) ? Color.blue.opacity(0.05) : Color.clear)
+        .background(isStageActive(stage) ? AppTheme.accentColor.opacity(0.05) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var installStatusLabel: String {
@@ -385,22 +425,15 @@ struct InstallView: View {
         )
     }
 
-    /// Called when the `DocumentPickerView` successfully returns a URL.
-    /// Because we use `asCopy: true`, the URL points to an app-owned temp file — no
-    /// security-scoped resource access is needed.
     private func handleFilePickerSelection(_ url: URL) {
         guard url.pathExtension.lowercased() == "ipa" else {
             filePickerError = "Selected file is not an IPA. Please choose a .ipa file."
-            // Delete the stale copy the system created for us.
             try? FileManager.default.removeItem(at: url)
             return
         }
         filePickerError = nil
         Task {
             await startInstall(url: url)
-            // The file returned with asCopy: true is a temp copy the system manages.
-            // We don't need to stopAccessingSecurityScopedResource because there's
-            // no security-scope to manage.
         }
     }
 
@@ -412,22 +445,22 @@ struct InstallView: View {
         }
 
         installStatus = .importing("Importing IPA...")
-        installProgress = 0.1
         installError = nil
 
         do {
             for try await stage in installer.install(ipaURL: url) {
                 switch stage {
                 case .parsing:
-                    installStatus = .parsing; installProgress = 0.25
+                    installStatus = .parsing
                 case .injectingEntitlements:
-                    installStatus = .injectingEntitlements; installProgress = 0.5
+                    installStatus = .injectingEntitlements
                 case .copyingToApplications:
-                    installStatus = .copyingToApplications; installProgress = 0.75
+                    installStatus = .copyingToApplications
                 case .registeringWithLaunchServices:
-                    installStatus = .registeringWithLaunchServices; installProgress = 0.9
+                    installStatus = .registeringWithLaunchServices
                 case .complete:
-                    installStatus = .complete; installProgress = 1.0
+                    installStatus = .complete
+                    coordinator.appendActivity(ActivityEntry(message: "IPA installed successfully", type: .success))
                 }
             }
         } catch {
@@ -436,9 +469,7 @@ struct InstallView: View {
                 tag: "InstallView"
             )
             installStatus = .failed(error.localizedDescription)
-            installProgress = 0.0
+            coordinator.appendActivity(ActivityEntry(message: "Install failed: \(error.localizedDescription)", type: .error))
         }
     }
 }
-
-

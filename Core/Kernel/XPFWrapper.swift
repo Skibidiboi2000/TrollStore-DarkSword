@@ -89,6 +89,43 @@ public enum XPFWrapper {
         initLock.unlock()
     }
 
+    /// Verify a struct offset against XPF resolution from kernelcache.
+    /// Returns true if the offset matches the expected value, false with a
+    /// warning if they differ (the hardcoded offset may be wrong for this build).
+    /// Requires XPF to be initialized (ensureInitialized()).
+    public static func validateStructOffset(named: String, expected: UInt32) -> Bool {
+        guard ensureInitialized() else {
+            LogManager.shared.append("XPF not initialized -- cannot validate \(named)", tag: "XPF")
+            return false
+        }
+        let resolved = xpf_item_resolve(named)
+        guard resolved > 0 else {
+            LogManager.shared.append("XPF cannot resolve \(named) -- this kernelcache may lack this symbol", tag: "XPF")
+            return false
+        }
+        let match = resolved == UInt64(expected)
+        if !match {
+            LogManager.shared.append(
+                "\u{26A0}\u{FE0F} OFFSET MISMATCH: \(named) expected=0x\(String(expected, radix: 16)) xpf=0x\(String(resolved, radix: 16))",
+                tag: "XPF"
+            )
+        }
+        return match
+    }
+
+    /// Validate all critical struct offsets against XPF.
+    /// Logs warnings for any mismatches. Returns false if ANY critical offset
+    /// (icmp6filt) is mismatched.
+    public static func validateCriticalOffsets() -> Bool {
+        // inp_icmp6filter -- critical for exploit krw path.
+        // Non-fatal for now: XPF struct offset naming may differ from the actual
+        // symbol path in XPF's database, so a "not found" result is expected.
+        validateStructOffset(
+            named: "inp_depend6.inp6_icmp6filt",
+            expected: get_off_inpcb_inp_depend6_inp6_icmp6filt()
+        )
+    }
+
     public static func findKernelBase() -> UInt64 {
         if ensureInitialized() {
             let base = xpfKernelBase
