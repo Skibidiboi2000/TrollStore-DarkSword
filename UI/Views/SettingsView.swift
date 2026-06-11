@@ -7,7 +7,16 @@ struct SettingsView: View {
     @State private var icmp6filtOffsetText: String
 
     init() {
-        let stored = UserDefaults.standard.object(forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt") as? UInt32 ?? 0x148
+        // Use the runtime offset from offsets_init() if available, otherwise
+        // pick a version-appropriate default (0x148 for iOS 17.x, 0x138 for 18+).
+        let runtime = get_off_inpcb_inp_depend6_inp6_icmp6filt()
+        let fallback: UInt32 = {
+            let os = ProcessInfo.processInfo.operatingSystemVersion
+            if os.majorVersion >= 18 { return 0x138 }
+            return 0x148
+        }()
+        let value = runtime > 0 ? runtime : fallback
+        let stored = UserDefaults.standard.object(forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt") as? UInt32 ?? value
         _icmp6filtOffsetText = State(initialValue: "0x" + String(stored, radix: 16))
     }
 
