@@ -8,7 +8,13 @@ OUTPUT_DIR="$PROJECT_DIR/build"
 
 echo "=== TrollStoreDarkSword IPA Builder ==="
 
-# 1. Check Xcode
+# 1. Prefer Xcode 27 beta if available (has SDK needed for modern device support),
+#    otherwise fall back to default Xcode.
+if [ -d "/Applications/Xcode-beta.app" ]; then
+    export DEVELOPER_DIR="/Applications/Xcode-beta.app/Contents/Developer"
+    echo "  Using Xcode beta: $(xcodebuild -version | head -1)"
+fi
+
 if ! xcodebuild -version &>/dev/null; then
     echo "ERROR: Xcode is required but not found."
     echo "Install from the Mac App Store or https://developer.apple.com/xcode/"
