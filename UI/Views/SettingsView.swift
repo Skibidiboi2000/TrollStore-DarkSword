@@ -179,8 +179,24 @@ struct SettingsView: View {
 
     private var diagnosticsSection: some View {
         VStack(spacing: 0) {
+            NavigationLink(destination: FileBrowserView()) {
+                SettingsChevronRow(icon: "folder.fill", color: .blue, title: "File Browser (VFS)")
+            }
+            .buttonStyle(.plain)
+
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
             NavigationLink(destination: LogDetailView(log: coordinator.exploitLog)) {
                 SettingsChevronRow(icon: "list.bullet.rectangle.fill", color: .gray, title: "Exploit Log")
+            }
+            .buttonStyle(.plain)
+
+            AppTheme.thinSeparatorColor.frame(height: 0.5).padding(.leading, 52)
+
+            Button(action: exportPanicLog) {
+                SettingsActionRow(icon: "ant.fill", color: .orange, title: "Export Panic Log") {
+                    exportPanicLog()
+                }
             }
             .buttonStyle(.plain)
 
@@ -287,6 +303,17 @@ struct SettingsView: View {
             LogManager.shared.append("Exported \(data.count) bytes", tag: "Settings")
         } catch {
             LogManager.shared.append("Export failed: \(error.localizedDescription)", tag: "Settings")
+        }
+    }
+
+    private func exportPanicLog() {
+        if let path = PanicDiagnostics.exportLatestPanic() {
+            let panicText = (try? String(contentsOf: path, encoding: .utf8)) ?? ""
+            let reason = PanicDiagnostics.parsePanicReason(panicText) ?? "Unknown"
+            LogManager.shared.append("Panic log exported to \(path.lastPathComponent)", tag: "Settings")
+            LogManager.shared.append("Panic reason: \(reason)", tag: "Settings")
+        } else {
+            LogManager.shared.append("No panic log found", tag: "Settings")
         }
     }
 

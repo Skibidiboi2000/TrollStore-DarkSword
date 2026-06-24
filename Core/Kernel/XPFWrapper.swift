@@ -126,6 +126,65 @@ public enum XPFWrapper {
         )
     }
 
+    /// Auto-override hardcoded offsets with XPF-resolved values using the
+    /// existing NSUserDefaults-based override mechanism in offsets.m.
+    ///
+    /// Call this after ensureInitialized() and BEFORE offsets_init() so that
+    /// loadalloffsets() inside offsets_init picks up the corrected values.
+    ///
+    /// Maps XPF struct member paths to the UserDefaults keys used by offsets.m
+    /// (format: "lara.offset.off_<struct>_<field>").
+    public static func applyXPFOffsetOverrides() {
+        guard ensureInitialized() else { return }
+        let defaults = UserDefaults.standard
+        let mappings: [(xpfSymbol: String, udKey: String, is64: Bool, oldValPtr: UnsafeRawPointer?)] = [
+            ("inp_depend6.inp6_icmp6filt",  "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt",  false, nil),
+            ("inp_list_le_next",            "lara.offset.off_inpcb_inp_list_le_next",              false, nil),
+            ("inp_pcbinfo",                 "lara.offset.off_inpcb_inp_pcbinfo",                    false, nil),
+            ("inp_socket",                  "lara.offset.off_inpcb_inp_socket",                     false, nil),
+            ("so_usecount",                 "lara.offset.off_socket_so_usecount",                   false, nil),
+            ("so_proto",                    "lara.offset.off_socket_so_proto",                      false, nil),
+            ("pr_input",                    "lara.offset.off_protosw_pr_input",                     false, nil),
+        ]
+
+        var overriddenCount = 0
+        for (sym, key, _, _) in mappings {
+            guard !sym.isEmpty else { continue }
+            let resolved = xpf_item_resolve(sym)
+            guard resolved > 0 else { continue }
+
+            let oldValue: UInt32
+            if let ptr = getOffsetsPtr(for: key) {
+                oldValue = ptr.pointee
+            } else {
+                oldValue = UInt32(defaults.integer(forKey: key))
+            }
+
+            if oldValue != UInt32(resolved) {
+                defaults.set(Int32(resolved), forKey: key)
+                overriddenCount += 1
+                LogManager.shared.append(
+                    "XPF override: \(sym) → 0x\(String(resolved, radix: 16)) (was 0x\(String(oldValue, radix: 16)))",
+                    tag: "XPF"
+                )
+            }
+        }
+
+        if overriddenCount > 0 {
+            defaults.synchronize()
+            LogManager.shared.append("Applied \(overriddenCount) XPF offset overrides", tag: "XPF")
+        }
+    }
+
+    /// Look up a C global offset variable's address by its UserDefaults key pattern.
+    /// Returns nil for symbols that aren't exposed via the C global table.
+    private static func getOffsetsPtr(for key: String) -> UnsafeMutablePointer<UInt32>? {
+        // The C globals (off_inpcb_inp_depend6_inp6_icmp6filt etc.) are declared
+        // in offsets.m. We can't easily look them up by name at runtime.
+        // Instead, we rely on NSUserDefaults readback by loadalloffsets().
+        return nil
+    }
+
     public static func findKernelBase() -> UInt64 {
         if ensureInitialized() {
             let base = xpfKernelBase

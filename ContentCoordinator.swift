@@ -2,6 +2,10 @@ import SwiftUI
 
 @MainActor
 public final class ContentCoordinator: ObservableObject {
+    /// Parsed panic reason from the last kernel panic, or nil.
+    @Published public var lastPanicReason: String?
+    /// Whether the last panic was from DarkSword exploit failure.
+    @Published public var isDarkSwordPanic: Bool = false
     /// Shared UserDefaults key used for kernel-panic detection across app launches.
     public static let panicFlagKey = "com.trollstoredarksword.exploitRunning"
     public let deviceInfo = DeviceInfo.current
@@ -60,6 +64,16 @@ public final class ContentCoordinator: ObservableObject {
             // Keep the flag set until user acknowledges so the panic screen shows on
             // every launch until they tap OK.
             appState = .panicRecovery
+
+            // Read and parse the latest panic log for diagnostics
+            if let panicText = PanicDiagnostics.readLatestPanic() {
+                lastPanicReason = PanicDiagnostics.parsePanicReason(panicText)
+                isDarkSwordPanic = PanicDiagnostics.isDarkSwordPanic(panicText)
+                LogManager.shared.append(
+                    "Panic detected: \(lastPanicReason ?? "unknown") [DarkSword: \(isDarkSwordPanic)]",
+                    tag: "ContentCoordinator"
+                )
+            }
         }
     }
 
@@ -112,7 +126,9 @@ public final class ContentCoordinator: ObservableObject {
                 guard let self = self else { return }
                 if ok {
                     self.exploitViewModel.currentStage = .runningXPF
-                    self.appendLog("Offsets resolved — starting exploit")
+                    self.appendLog("Offsets resolved — applying XPF overrides")
+                    XPFWrapper.applyXPFOffsetOverrides()
+                    self.appendLog("Starting exploit")
 
                     // Validate critical struct offsets before running exploit
                     if !XPFWrapper.validateCriticalOffsets() {
