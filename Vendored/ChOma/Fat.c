@@ -73,7 +73,12 @@ int fat_parse_slices(Fat *fat)
             }
 
             MemoryStream *machOStream = memory_stream_softclone(fat->stream);
-            int r = memory_stream_trim(machOStream, arch64.offset, fileSize - (arch64.offset + arch64.size));
+            uint64_t total = arch64.offset + arch64.size;
+            if (total > fileSize || total < arch64.offset) {
+                memory_stream_free(machOStream);
+                continue;
+            }
+            int r = memory_stream_trim(machOStream, arch64.offset, fileSize - total);
             if (r == 0) {
                 fat->slices[i] = macho_init(machOStream, arch64);
                 if (!fat->slices[i]) return -1;

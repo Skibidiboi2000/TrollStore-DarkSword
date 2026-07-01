@@ -64,7 +64,11 @@ public struct IPAParser {
 
         // Unzip IPA — caller (IPAInstaller) cleans up via ParsedApp.tempDirectory.
         // Do NOT defer-cleanup here; parsed.executablePath/bundlePath point into tempDir.
+        // Use an intermediate flag to avoid leaking the dir on early throws.
+        var didCreateTempDir = false
+        defer { if !didCreateTempDir { try? fileManager.removeItem(at: tempDir) } }
         try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        didCreateTempDir = true
         try Self.unzipIPA(at: ipaURL, to: tempDir)
 
         // Find Payload directory

@@ -441,6 +441,7 @@ struct InstallView: View {
     private func startInstall(url: URL) async {
         guard let installer else {
             filePickerError = "Installer not ready — kernel exploit may still be running."
+            try? FileManager.default.removeItem(at: url)
             return
         }
 
@@ -471,5 +472,7 @@ struct InstallView: View {
             installStatus = .failed(error.localizedDescription)
             coordinator.appendActivity(ActivityEntry(message: "Install failed: \(error.localizedDescription)", type: .error))
         }
+        // Clean up the temp IPA copy from the document picker
+        try? FileManager.default.removeItem(at: url)
     }
 }

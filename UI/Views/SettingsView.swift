@@ -16,7 +16,7 @@ struct SettingsView: View {
             return 0x148
         }()
         let value = runtime > 0 ? runtime : fallback
-        let stored = UserDefaults.standard.object(forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt") as? UInt32 ?? value
+        let stored = UInt32(UserDefaults.standard.integer(forKey: "lara.offset.off_inpcb_inp_depend6_inp6_icmp6filt"))
         _icmp6filtOffsetText = State(initialValue: "0x" + String(stored, radix: 16))
     }
 
@@ -288,8 +288,12 @@ struct SettingsView: View {
             LogManager.shared.append("SpringBoard not found — cannot re-register", tag: "Settings")
             return
         }
-        _ = try? await remoteCall.execute(inProcess: pid, command: "/usr/bin/uicache -r")
-        LogManager.shared.append("Re-registration complete", tag: "Settings")
+        do {
+            try await remoteCall.execute(inProcess: pid, command: "/usr/bin/uicache -r")
+            LogManager.shared.append("Re-registration complete", tag: "Settings")
+        } catch {
+            LogManager.shared.append("Re-registration failed: \(error.localizedDescription)", tag: "Settings")
+        }
     }
 
     private func rescanApps() async {
@@ -330,16 +334,26 @@ struct SettingsView: View {
         }
         let remoteCall = RemoteCallEngine(kernelHandle: handle)
         let springBoard = SpringBoardExecutor(remoteCall: remoteCall)
+        var uninstalledBundleIDs: [String] = []
+        var hadFailure = false
         for app in apps {
             do {
                 try await springBoard.uninstallAppBundle(bundleID: app.bundleID)
-                persistence.removeApp(bundleID: app.bundleID)
                 LogManager.shared.append("Uninstalled \(app.bundleID)", tag: "Settings")
+                uninstalledBundleIDs.append(app.bundleID)
             } catch {
                 LogManager.shared.append("Uninstall failed for \(app.bundleID): \(error)", tag: "Settings")
+                hadFailure = true
+                break // Stop on first failure to maintain consistency
             }
         }
-        LogManager.shared.append("Uninstall all complete", tag: "Settings")
+        // Only remove from persistence the ones that were successfully uninstalled
+        for bundleID in uninstalledBundleIDs {
+            persistence.removeApp(bundleID: bundleID)
+        }
+        LogManager.shared.append(hadFailure
+            ? "Uninstall stopped after failure — \(uninstalledBundleIDs.count) apps removed"
+            : "Uninstall all complete — \(uninstalledBundleIDs.count) apps removed")
     }
 }
 

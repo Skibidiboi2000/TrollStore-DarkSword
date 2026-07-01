@@ -161,7 +161,7 @@ public enum XPFWrapper {
             }
 
             if oldValue != UInt32(resolved) {
-                defaults.set(Int32(resolved), forKey: key)
+                defaults.set(Int64(resolved), forKey: key)
                 overriddenCount += 1
                 LogManager.shared.append(
                     "XPF override: \(sym) → 0x\(String(resolved, radix: 16)) (was 0x\(String(oldValue, radix: 16)))",

@@ -50,14 +50,14 @@ bool code_directory_calculate_page_hash(CS_CodeDirectory *codeDir, MachO *macho,
         case CS_HASHTYPE_SHA256_256:
         case CS_HASHTYPE_SHA256_160: {
             uint8_t fullHash[CC_SHA256_DIGEST_LENGTH];
-            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
 
         case CS_HASHTYPE_SHA384_384: {
             uint8_t fullHash[CC_SHA384_DIGEST_LENGTH];
-            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
@@ -99,14 +99,14 @@ bool code_directory_calculate_page_hash_dsc(CS_CodeDirectory *codeDir, DyldShare
         case CS_HASHTYPE_SHA256_256:
         case CS_HASHTYPE_SHA256_160: {
             uint8_t fullHash[CC_SHA256_DIGEST_LENGTH];
-            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
 
         case CS_HASHTYPE_SHA384_384: {
             uint8_t fullHash[CC_SHA384_DIGEST_LENGTH];
-            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
@@ -129,7 +129,7 @@ bool csd_code_directory_verify_code_slot(CS_DecodedBlob *codeDirBlob, MachO *mac
     csd_code_directory_read_slot_hash(codeDirBlob, macho, slot, slotHash);
 
     uint8_t pageHash[codeDir.hashSize];
-    if (!code_directory_calculate_page_hash(&codeDir, macho, slot, slotHash)) return false;
+    if (!code_directory_calculate_page_hash(&codeDir, macho, slot, pageHash)) return false;
 
     return (memcmp(slotHash, pageHash, codeDir.hashSize) == 0);
 }

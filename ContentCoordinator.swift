@@ -91,7 +91,16 @@ public final class ContentCoordinator: ObservableObject {
         }
     }
 
+    /// Guards against re-entering the pipeline while it's already running.
+    /// Reset by handleExploitSuccess / handleExploitFailure / acknowledgePanic.
+    private var _pipelineRunning = false
+
     public func startPipeline() {
+        guard !_pipelineRunning else {
+            appendLog("Pipeline already running — ignoring duplicate start")
+            return
+        }
+        _pipelineRunning = true
         LogManager.shared.startNewSession()
         hasSeenSuccess = false
         guard deviceInfo.isSupported else {
@@ -151,6 +160,7 @@ public final class ContentCoordinator: ObservableObject {
     /// app returns to the normal .sandboxed start on next launch.
     public func acknowledgePanic() {
         UserDefaults.standard.set(false, forKey: Self.panicFlagKey)
+        _pipelineRunning = false
         appState = .sandboxed
         appendLog("Panic acknowledged — returning to sandboxed state")
     }
@@ -198,9 +208,9 @@ public final class ContentCoordinator: ObservableObject {
         // so copy it there from wherever XPF loaded it.
         if let kcPath = XPFWrapper.currentKernelCachePath {
             let docsKc = NSHomeDirectory() + "/Documents/kernelcache"
-            if !FileManager.default.fileExists(atPath: docsKc) {
-                try? FileManager.default.copyItem(atPath: kcPath, toPath: docsKc)
-            }
+            // Always overwrite: the kernelcache may have changed if XPF re-downloaded it.
+            _ = try? FileManager.default.removeItem(atPath: docsKc)
+            try? FileManager.default.copyItem(atPath: kcPath, toPath: docsKc)
         } else {
             appendLog("XPF kernel cache path not available — mac_proc_enforce resolution may fail")
         }
@@ -211,8 +221,10 @@ public final class ContentCoordinator: ObservableObject {
         }
 
         // Step 3: Initialize kernel structure offsets for post-exploit C modules
-        // (sbx, vfs, vnode, RemoteCall). offsets_init calls xpf_stop() internally,
-        // destroying gXPF, but we no longer need XPF after this point.
+        // (sbx, vfs, vnode, RemoteCall). offsets_init does NOT touch XPF
+        // (xpf_stop was called inside resolvekernoffsets / getmacprocenforceoff).
+        // We call resetXPF() to invalidate the Swift-side cached path so that
+        // if rePatchKernel in Settings re-starts XPF, it gets a fresh init.
         //
         // NOTE: offsets_init() was ALREADY called inside pe_v1()/pe_a18() during
         // ds_run() to resolve socket struct offsets before they're needed by
@@ -221,7 +233,6 @@ public final class ContentCoordinator: ObservableObject {
         // so it's intentional, not a duplicate.
         appendLog("Patches applied — initializing post-exploit offsets...")
         offsets_init()
-        // offsets_init calls xpf_stop() internally, destroying gXPF.
         XPFWrapper.resetXPF()
         guard offsets_are_initialized() else {
             handleExploitFailure("Kernel offsets initialization failed — unsupported iOS version")
@@ -311,6 +322,7 @@ public final class ContentCoordinator: ObservableObject {
 
         // All pipeline steps succeeded — clear the panic flag.
         UserDefaults.standard.set(false, forKey: Self.panicFlagKey)
+        _pipelineRunning = false
         appState = .patched
         exploitViewModel.currentStage = .complete
         exploitViewModel.isRunning = false
@@ -322,6 +334,7 @@ public final class ContentCoordinator: ObservableObject {
         appState = .exploitFailed(reason)
         exploitViewModel.isRunning = false
         exploitViewModel.currentStage = .failed
+        _pipelineRunning = false
         appendActivity(ActivityEntry(message: "Exploit failed: \(reason)", type: .error))
         appendLog("FAILED: \(reason)")
     }
@@ -342,6 +355,13 @@ public final class ContentCoordinator: ObservableObject {
             try FileManager.default.copyItem(at: url, to: dest)
             pendingIPAURL = dest
             appendLog("Received IPA — pending installation")
+            // Schedule cleanup of the temp IPA copy after a delay.
+            // The install process will consume pendingIPAURL and set it to nil.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 60) { [weak self] in
+                if self?.pendingIPAURL == dest {
+                    try? FileManager.default.removeItem(at: dest)
+                }
+            }
         } catch {
             importError = "Failed to import IPA: \(error.localizedDescription)"
             appendLog("Failed to copy shared IPA: \(error.localizedDescription)")

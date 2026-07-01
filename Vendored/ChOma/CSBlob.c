@@ -329,8 +329,13 @@ CS_DecodedSuperBlob *csd_superblob_decode(CS_SuperBlob *superblob)
     for (uint32_t i = 0; i < BIG_TO_HOST(superblob->count); i++) {
         CS_BlobIndex curIndex = superblob->index[i];
         BLOB_INDEX_APPLY_BYTE_ORDER(&curIndex, BIG_TO_HOST_APPLIER);
-        //printf("decoding %u (type: %x, offset: 0x%x)\n", i, curIndex.type, curIndex.offset);
 
+        uint32_t superblobLen = BIG_TO_HOST(superblob->length);
+        // Validate index offset is within superblob bounds
+        if (curIndex.offset < sizeof(CS_SuperBlob) || curIndex.offset + sizeof(CS_GenericBlob) > superblobLen) {
+            printf("Warning: superblob index %u has out-of-bounds offset 0x%x (superblob length 0x%x)\n", i, curIndex.offset, superblobLen);
+            continue;
+        }
         CS_GenericBlob *curBlobData = (CS_GenericBlob *)(((uint8_t*)superblob) + curIndex.offset);
 
         *nextBlob = csd_blob_init(curIndex.type, curBlobData);
@@ -351,7 +356,11 @@ CS_SuperBlob *csd_superblob_encode(CS_DecodedSuperBlob *decodedSuperblob)
         nextBlob = nextBlob->next;
     }
 
-    uint32_t superblobLength = sizeof(CS_SuperBlob) + (sizeof(CS_BlobIndex) * blobCount) + blobSize;
+    // Guard against integer overflow in superblob size calculation
+    if (blobCount > UINT32_MAX / sizeof(CS_BlobIndex)) return NULL;
+    uint32_t idxTableSize = sizeof(CS_BlobIndex) * blobCount;
+    if (blobSize > UINT32_MAX - idxTableSize - sizeof(CS_SuperBlob)) return NULL;
+    uint32_t superblobLength = sizeof(CS_SuperBlob) + idxTableSize + blobSize;
     CS_SuperBlob *superblob = malloc(superblobLength);
 
     // Populate superblob fields

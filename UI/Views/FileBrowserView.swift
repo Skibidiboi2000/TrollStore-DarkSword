@@ -104,8 +104,7 @@ struct FileBrowserView: View {
             DispatchQueue.main.async {
                 entries = sorted
                 isLoading = false
-                if list.isEmpty {
-                    // VFS might not be ready
+                if list.isEmpty && !VirtualFileSystem.isReady {
                     errorMessage = "VFS not initialized — run exploit first"
                 }
             }
@@ -133,9 +132,14 @@ struct FileBrowserView: View {
     }
 
     private func isDirectory(_ entry: String) -> Bool {
-        // Simple heuristic: entries without a '.' extension are dirs (most Unix filesystems)
-        // VFS entries from vfs_listdir don't include type info in the basic API
-        !entry.contains(".")
+        // VFS entries from vfs_listdir don't include type info in the basic API.
+        // Heuristic: directories have no extension AND are NOT known extensionless file types.
+        // Common Unix files without extensions that should NOT be treated as directories:
+        let extensionlessFiles = Set(["README", "Makefile", "CMakeLists.txt", "LICENSE", "CHANGELOG",
+                                       "AUTHORS", "CONTRIBUTORS", "TODO", "COPYING", "INSTALL"])
+        if extensionlessFiles.contains(entry) { return false }
+        if entry.hasPrefix(".") { return false }
+        return !entry.contains(".")
     }
 
     private func sizeString(_ entry: String) -> String {

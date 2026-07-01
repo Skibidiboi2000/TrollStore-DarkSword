@@ -61,7 +61,7 @@ public final class IPAInstaller: @unchecked Sendable {
     /// - Returns: Async stream emitting real progress stages
     public func install(ipaURL: URL) -> AsyncThrowingStream<InstallStage, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     continuation.yield(.parsing)
                     currentStage = "parsing"
@@ -111,6 +111,7 @@ public final class IPAInstaller: @unchecked Sendable {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 

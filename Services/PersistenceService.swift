@@ -13,6 +13,12 @@ public final class PersistenceService: @unchecked Sendable {
 
     /// Load the list of installed apps from persistent storage.
     public func loadInstalledApps() -> [InstalledApp] {
+        lock.withLock {
+            _loadInstalledApps()
+        }
+    }
+
+    private func _loadInstalledApps() -> [InstalledApp] {
         guard let data = try? Data(contentsOf: appsFile) else { return [] }
         do {
             return try JSONDecoder().decode([InstalledApp].self, from: data)
@@ -24,6 +30,12 @@ public final class PersistenceService: @unchecked Sendable {
 
     /// Save the complete list of installed apps to persistent storage.
     public func saveInstalledApps(_ apps: [InstalledApp]) {
+        lock.withLock {
+            _saveInstalledApps(apps)
+        }
+    }
+
+    private func _saveInstalledApps(_ apps: [InstalledApp]) {
         guard let data = try? JSONEncoder().encode(apps) else { return }
         try? data.write(to: appsFile, options: .atomic)
     }
@@ -31,19 +43,19 @@ public final class PersistenceService: @unchecked Sendable {
     /// Add a single app to the persistent list (replaces existing entry with same bundleID).
     public func addApp(_ app: InstalledApp) {
         lock.withLock {
-            var apps = loadInstalledApps()
+            var apps = _loadInstalledApps()
             apps.removeAll { $0.bundleID == app.bundleID }
             apps.append(app)
-            saveInstalledApps(apps)
+            _saveInstalledApps(apps)
         }
     }
 
     /// Remove an app from the persistent list by bundle ID.
     public func removeApp(bundleID: String) {
         lock.withLock {
-            var apps = loadInstalledApps()
+            var apps = _loadInstalledApps()
             apps.removeAll { $0.bundleID == bundleID }
-            saveInstalledApps(apps)
+            _saveInstalledApps(apps)
         }
     }
 
@@ -53,7 +65,7 @@ public final class PersistenceService: @unchecked Sendable {
     public func rescanApplicationsDirectory() -> [InstalledApp] {
         lock.withLock {
             let fm = fileManager
-            var apps = loadInstalledApps()
+            var apps = _loadInstalledApps()
             let existingIDs = Set(apps.map(\.bundleID))
 
             guard let contents = try? fm.contentsOfDirectory(atPath: "/Applications/") else { return apps }
@@ -86,8 +98,8 @@ public final class PersistenceService: @unchecked Sendable {
                     executableName: executable
                 )
                 apps.append(app)
-                saveInstalledApps(apps)
             }
+            _saveInstalledApps(apps)
             return apps
         }
     }

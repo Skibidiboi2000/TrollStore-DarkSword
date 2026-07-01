@@ -107,7 +107,7 @@ public final class LogManager: @unchecked Sendable {
     }
 
     deinit {
-        endSessionInternal()
+        queue.sync { endSessionInternal() }
     }
 }
 

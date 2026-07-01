@@ -496,7 +496,7 @@ CS_DecodedBlob *create_der_entitlements_blob(const char *entitlementsFile) {
 
     memcpy((char *)genericBlob + sizeof(CSMAGIC_EMBEDDED_DER_ENTITLEMENTS) + sizeof(uint32_t), entitlements->data, entitlements->length);
 
-    CS_DecodedBlob *entitlementsBlob = csd_blob_init(CSSLOT_ENTITLEMENTS, (CS_GenericBlob *)genericBlob);
+    CS_DecodedBlob *entitlementsBlob = csd_blob_init(CSSLOT_DER_ENTITLEMENTS, (CS_GenericBlob *)genericBlob);
     if (entitlementsBlob == NULL) {
         fprintf(stderr, "Error: failed to create entitlements blob\n");
         free(genericBlob);
