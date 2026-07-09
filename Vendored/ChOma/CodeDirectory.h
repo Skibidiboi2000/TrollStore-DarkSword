@@ -61,7 +61,6 @@ int csd_code_directory_calculate_hash(CS_DecodedBlob *codeDirBlob, void *cdhashO
 int csd_code_directory_print_content(CS_DecodedBlob *codeDirBlob, MachO *macho, bool printSlots, bool verifySlots);
 int csd_code_directory_update_special_slots(CS_DecodedBlob *codeDirBlob, CS_DecodedBlob *xmlEntitlements, CS_DecodedBlob *derEntitlements, CS_DecodedBlob *requirements);
 int csd_code_directory_update_code_slots(CS_DecodedBlob *codeDirBlob, MachO *macho);
-int csd_code_directory_update_code_slots_dsc(CS_DecodedBlob *codeDirBlob, DyldSharedCacheFile *dscFile);
 CS_DecodedBlob *csd_code_directory_init(MachO *macho, int hashType, bool alternate);
 
 #endif // CODE_DIRECTORY_H

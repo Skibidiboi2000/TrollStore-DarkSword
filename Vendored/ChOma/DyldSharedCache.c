@@ -1,5 +1,4 @@
 #include "DyldSharedCache.h"
-#include "MachOByteOrder.h"
 #include <libgen.h>
 #include <sys/syslimits.h>
 #include <sys/types.h>
@@ -122,7 +121,7 @@ DyldSharedCacheFile *_dsc_load_file(const char *dscPath, const char suffix[32])
     strcpy(filepath, dscPath);
     strncat(filepath, suffix, 32);
 
-    fd = open(filepath, O_RDWR);
+    fd = open(filepath, O_RDONLY);
     if (fd < 0) goto fail;
 
     struct stat sb;
@@ -174,18 +173,6 @@ int dsc_file_read_string_at_offset(DyldSharedCacheFile *dscFile, uint64_t offset
 {
     lseek(dscFile->fd, offset, SEEK_SET);
     return read_string(dscFile->fd, outBuf);
-}
-
-int dsc_file_write_at_offset(DyldSharedCacheFile *dscFile, uint64_t offset, size_t size, const void *inBuf)
-{
-    lseek(dscFile->fd, offset, SEEK_SET);
-    
-    if (offset + size > dscFile->filesize) {
-        ftruncate(dscFile->fd, offset + size);
-        dscFile->filesize = offset + size;
-    }
-    
-    return !(write(dscFile->fd, inBuf, size) == size);
 }
 
 DyldSharedCache *dsc_init_from_path_premapped(const char *path, uint32_t premapSlide)
@@ -1008,21 +995,4 @@ void dsc_free(DyldSharedCache *sharedCache)
         free(sharedCache->symbolFile.nlist);
     }
     free(sharedCache);
-}
-
-int update_dsc_file_for_coretrust_bypass(DyldSharedCacheFile *dscFile, CS_SuperBlob *superblob, uint64_t originalCodeSignatureSize) {
-
-    uint64_t sizeOfCodeSignature = BIG_TO_HOST(superblob->length);
-
-    // Within a dyld shared cache file, the code signature blob is always at the end of file
-    uint64_t blockPaddingSize = dscFile->header.codeSignatureSize - originalCodeSignatureSize;
-    uint64_t newSegmentSize = sizeOfCodeSignature + blockPaddingSize;
-    uint64_t newVMSize = align_to_size(newSegmentSize, 0x4000);
-
-    // Update the size in the header
-    printf("Updating dscFile->header.codeSignatureSize...\n");
-    dsc_file_write_at_offset(dscFile, (uint64_t)offsetof(struct dyld_cache_header, codeSignatureSize), sizeof(newSegmentSize), &newSegmentSize);
-    dscFile->header.codeSignatureSize = newVMSize;
-
-    return 0;
 }

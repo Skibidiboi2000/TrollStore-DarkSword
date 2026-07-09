@@ -1,7 +1,6 @@
 #include "CSBlob.h"
 
 #include "CodeDirectory.h"
-#include "DyldSharedCache.h"
 #include "MachO.h"
 #include "MachOByteOrder.h"
 #include "BufferedStream.h"
@@ -91,65 +90,6 @@ const char *cs_slot_type_to_string(uint32_t slotType)
     default:
         return "Unknown blob type";
     }
-}
-
-int dsc_file_find_code_signature_bounds(DyldSharedCacheFile *dscFile, uint32_t *offsetOut, uint32_t *sizeOut)
-{
-    struct dyld_cache_header *mainHeader = &dscFile->header;
-    *offsetOut = (uint32_t)mainHeader->codeSignatureOffset;
-    *sizeOut = (uint32_t)mainHeader->codeSignatureSize;
-    return 0;
-}
-
-CS_SuperBlob *dsc_file_read_code_signature(DyldSharedCacheFile *dscFile)
-{
-    uint32_t offset = 0, size = 0;
-    if (dsc_file_find_code_signature_bounds(dscFile, &offset, &size) == 0) {
-        CS_SuperBlob *dataOut = malloc(size);
-        if (dsc_file_read_at_offset(dscFile, offset, size, dataOut) == 0) {
-            return dataOut;
-        }
-        else {
-            free(dataOut);
-        }
-    }
-    return NULL;
-}
-
-int dsc_file_replace_code_signature(DyldSharedCacheFile *dscFile, CS_SuperBlob *superblob)
-{
-    uint32_t csSegmentOffset = 0, csSegmentSize = 0;
-    dsc_file_find_code_signature_bounds(dscFile, &csSegmentOffset, &csSegmentSize);
-
-    uint32_t sizeOfCodeSignature = 0;
-    //memory_stream_read(macho->stream, csSegmentOffset + offsetof(CS_SuperBlob, length), sizeof(sizeOfCodeSignature), &sizeOfCodeSignature);
-    dsc_file_read_at_offset(dscFile, csSegmentOffset + offsetof(CS_SuperBlob, length), sizeof(sizeOfCodeSignature), &sizeOfCodeSignature);
-    sizeOfCodeSignature = BIG_TO_HOST(sizeOfCodeSignature);
-
-    uint64_t newCodeSignatureSize = BIG_TO_HOST(superblob->length);
-
-    // See how much space we have to write the new code signature
-    uint64_t entireFileSize = dscFile->filesize;
-    uint64_t freeSpace = entireFileSize - csSegmentOffset;
-    uint64_t paddingSize = freeSpace - sizeOfCodeSignature;
-
-    if (newCodeSignatureSize >= freeSpace) {
-        dsc_file_write_at_offset(dscFile, csSegmentOffset, newCodeSignatureSize, superblob);
-        uint8_t padding[paddingSize];
-        memset(padding, 0, paddingSize);
-        dsc_file_write_at_offset(dscFile, csSegmentOffset + newCodeSignatureSize, paddingSize, padding);
-    } else if (newCodeSignatureSize < freeSpace) {
-        //memory_stream_trim(macho_get_stream(macho), 0, entireFileSize - csSegmentOffset);
-        ftruncate(dscFile->fd, csSegmentOffset + newCodeSignatureSize + paddingSize);
-        dscFile->filesize = csSegmentOffset + newCodeSignatureSize + paddingSize;
-        
-        dsc_file_write_at_offset(dscFile, csSegmentOffset, newCodeSignatureSize, superblob);
-        uint8_t padding[paddingSize];
-        memset(padding, 0, paddingSize);
-        dsc_file_write_at_offset(dscFile, csSegmentOffset + newCodeSignatureSize, paddingSize, padding);
-    }
-
-    return 0;
 }
 
 int macho_parse_signature_blob_to_der_encoded_data(MachO *macho, uint32_t signatureBlobOffset, uint32_t signatureBlobLength, void *outputDER)
@@ -329,13 +269,8 @@ CS_DecodedSuperBlob *csd_superblob_decode(CS_SuperBlob *superblob)
     for (uint32_t i = 0; i < BIG_TO_HOST(superblob->count); i++) {
         CS_BlobIndex curIndex = superblob->index[i];
         BLOB_INDEX_APPLY_BYTE_ORDER(&curIndex, BIG_TO_HOST_APPLIER);
+        //printf("decoding %u (type: %x, offset: 0x%x)\n", i, curIndex.type, curIndex.offset);
 
-        uint32_t superblobLen = BIG_TO_HOST(superblob->length);
-        // Validate index offset is within superblob bounds
-        if (curIndex.offset < sizeof(CS_SuperBlob) || curIndex.offset + sizeof(CS_GenericBlob) > superblobLen) {
-            printf("Warning: superblob index %u has out-of-bounds offset 0x%x (superblob length 0x%x)\n", i, curIndex.offset, superblobLen);
-            continue;
-        }
         CS_GenericBlob *curBlobData = (CS_GenericBlob *)(((uint8_t*)superblob) + curIndex.offset);
 
         *nextBlob = csd_blob_init(curIndex.type, curBlobData);
@@ -356,11 +291,7 @@ CS_SuperBlob *csd_superblob_encode(CS_DecodedSuperBlob *decodedSuperblob)
         nextBlob = nextBlob->next;
     }
 
-    // Guard against integer overflow in superblob size calculation
-    if (blobCount > UINT32_MAX / sizeof(CS_BlobIndex)) return NULL;
-    uint32_t idxTableSize = sizeof(CS_BlobIndex) * blobCount;
-    if (blobSize > UINT32_MAX - idxTableSize - sizeof(CS_SuperBlob)) return NULL;
-    uint32_t superblobLength = sizeof(CS_SuperBlob) + idxTableSize + blobSize;
+    uint32_t superblobLength = sizeof(CS_SuperBlob) + (sizeof(CS_BlobIndex) * blobCount) + blobSize;
     CS_SuperBlob *superblob = malloc(superblobLength);
 
     // Populate superblob fields

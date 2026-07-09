@@ -170,7 +170,7 @@ int memory_stream_copy_data(MemoryStream *originStream, uint64_t originOffset, M
         printf("Error: memory_stream_copy_data failed, originOffset OOB\n");
         return -1;
     }
-    if (targetOffset + size > targetSize && !(memory_stream_get_flags(targetStream) & MEMORY_STREAM_FLAG_AUTO_EXPAND)) {
+    if (targetOffset + size > targetSize && !(memory_stream_get_flags(targetStream) | MEMORY_STREAM_FLAG_AUTO_EXPAND)) {
         printf("Error: memory_stream_copy_data failed, targetOffset OOB\n");
         return -1;
     }

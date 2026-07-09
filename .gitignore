@@ -21,18 +21,8 @@ Vendored/lib/*.dylib
 # Runtime logs
 logs/
 
-# Claude AI / OpenCode / AI configuration
+# Claude AI
 .claude/
-.opencode/
-AGENTS_CONTEXT.md
+
+# Design notes
 CLAUDE.md
-
-# Demo / reference projects
-UI_Demo.html
-Understand_WithOther_Project/
-
-# IPSW firmware files and extracted kernelcache
-ipsw/
-
-# Temporary docs and scratch plans
-docs/

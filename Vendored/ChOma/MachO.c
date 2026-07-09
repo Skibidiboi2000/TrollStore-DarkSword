@@ -50,11 +50,11 @@ int macho_read_uleb128_at_offset(MachO *macho, uint64_t offset, uint64_t maxOffs
 
     uint8_t v = 0;
     do {
-        if (curOffset >= maxOffset) {
+        macho_read_at_offset(macho, curOffset, sizeof(v), &v);
+        if (curOffset == maxOffset) {
             r = -1;
             break;
         }
-        macho_read_at_offset(macho, curOffset, sizeof(v), &v);
         uint64_t slice = v & 0x7f;
 
         if (bit > 63) {
@@ -217,7 +217,7 @@ int macho_enumerate_load_commands(MachO *macho, void (^enumeratorBlock)(struct l
         struct load_command loadCommand;
         if (macho_read_at_offset(macho, offset, sizeof(loadCommand), &loadCommand) != 0) continue;
         LOAD_COMMAND_APPLY_BYTE_ORDER(&loadCommand, LITTLE_TO_HOST_APPLIER);
-
+        
         if ((offset + loadCommand.cmdsize) > (headerSize + macho->machHeader.sizeofcmds)) {
             printf("Warning: Stopped reading load commands of %p at %#llx, because offset (%#llx) exceeded sizeofcmds (%#x), only read %d load commands instead of %d\n", macho, offset, offset + loadCommand.cmdsize, macho->machHeader.sizeofcmds, j, macho->machHeader.ncmds);
             if (macho_read_at_offset(macho, offset, sizeof(loadCommand), &loadCommand) != 0) continue;
@@ -229,13 +229,8 @@ int macho_enumerate_load_commands(MachO *macho, void (^enumeratorBlock)(struct l
             printf("Ignoring unknown command: 0x%x.\n", loadCommand.cmd);
         }
         else {
-            // Guard against zero or oversized cmdsize (stack VLA overflow)
-            if (loadCommand.cmdsize < sizeof(loadCommand) || loadCommand.cmdsize > 1024 * 1024) {
-                printf("Warning: invalid cmdsize 0x%x at offset %#llx, skipping\n", loadCommand.cmdsize, offset);
-                offset += loadCommand.cmdsize > 0 ? loadCommand.cmdsize : sizeof(loadCommand);
-                continue;
-            }
-            uint8_t cmd[loadCommand.cmdsize + 1];
+            // TODO: Check if cmdsize matches expected size for cmd
+            uint8_t cmd[loadCommand.cmdsize];
             if (macho_read_at_offset(macho, offset, loadCommand.cmdsize, cmd) != 0) continue;
             bool stop = false;
             enumeratorBlock(loadCommand, offset, (void *)cmd, &stop);
@@ -424,9 +419,7 @@ int macho_enumerate_symbols(MachO *macho, void (^enumeratorBlock)(const char *na
             else {
                 unsigned prevEnd = frontierCount;
                 frontierCount += childrenCount;
-                struct trie_node *newFrontier = realloc(frontier, sizeof(struct trie_node) * frontierCount);
-                if (!newFrontier) return -1;
-                frontier = newFrontier;
+                frontier = realloc(frontier, sizeof(struct trie_node) * frontierCount);
                 node = &frontier[i];
 
                 for (unsigned k = 0; k < childrenCount; k++) {
@@ -569,7 +562,6 @@ int macho_enumerate_function_starts(MachO *macho, void (^enumeratorBlock)(uint64
             uint32_t shift = 0;
             bool more = true;
             do {
-                if (p >= infoEnd) break;
                 uint8_t byte = *p++;
                 delta |= ((byte & 0x7F) << shift);
                 shift += 7;
@@ -693,15 +685,9 @@ int macho_parse_fileset_machos(MachO *macho)
 
             if (macho->filesetMachos == NULL) { macho->filesetMachos = malloc(macho->filesetCount * sizeof(FilesetMachO)); }
             else { macho->filesetMachos = realloc(macho->filesetMachos, macho->filesetCount * sizeof(FilesetMachO)); }
-            if (!macho->filesetMachos) return;
 
             FilesetMachO *filesetMacho = &macho->filesetMachos[i];
-            // Validate entry_id.offset is within the load command bounds
-            if (filesetCommand->entry_id.offset > 0 && filesetCommand->entry_id.offset < loadCommand.cmdsize) {
-                filesetMacho->entry_id = strdup((char *)cmd + filesetCommand->entry_id.offset);
-            } else {
-                filesetMacho->entry_id = NULL;
-            }
+            filesetMacho->entry_id = strdup((char *)cmd + filesetCommand->entry_id.offset);
             filesetMacho->vmaddr = filesetCommand->vmaddr;
             filesetMacho->fileoff = filesetCommand->fileoff;
             

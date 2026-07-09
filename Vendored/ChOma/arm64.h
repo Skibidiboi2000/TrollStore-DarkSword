@@ -41,6 +41,13 @@ typedef enum {
 	ARM64_LDP_STP_TYPE_SIGNED,
 } arm64_ldp_stp_type;
 
+typedef enum {
+	ARM64_SHIFT_TYPE_LSL = 0b00,
+	ARM64_SHIFT_TYPE_LSR = 0b01,
+	ARM64_SHIFT_TYPE_ASR = 0b10,
+	ARM64_SHIFT_TYPE_ROR = 0b11,
+} arm64_shift_type;
+
 typedef struct s_arm64_register {
 	uint8_t mask;
 	arm64_register_type type;
@@ -93,6 +100,8 @@ int arm64_gen_mov_reg(arm64_register destinationReg, arm64_register sourceReg, u
 int arm64_dec_mov_reg(uint32_t inst, arm64_register *destinationRegOut, arm64_register *sourceRegOut);
 int arm64_gen_add_imm(arm64_register destinationReg, arm64_register sourceReg, optional_uint64_t optImm, uint32_t *bytesOut, uint32_t *maskOut);
 int arm64_dec_add_imm(uint32_t inst, arm64_register *destinationRegOut, arm64_register *sourceRegOut, uint16_t *immOut);
+int arm64_gen_add_shift_reg(arm64_register destinationReg, arm64_register sourceReg, arm64_register shiftReg, arm64_shift_type shiftType, optional_uint64_t shiftImmOpt, uint32_t *bytesOut, uint32_t *maskOut);
+int arm64_dec_add_shift_reg(uint32_t inst, arm64_register *destinationRegOut, arm64_register *sourceRegOut, arm64_register *shiftRegOut, arm64_shift_type *shiftTypeOut, uint64_t *shiftImmOut);
 int arm64_gen_sub_imm(arm64_register destinationReg, arm64_register sourceReg, optional_uint64_t optImm, optional_bool optS, uint32_t *bytesOut, uint32_t *maskOut);
 int arm64_dec_sub_imm(uint32_t inst, arm64_register *destinationRegOut, arm64_register *sourceRegOut, uint16_t *immOut, bool *sOut);
 int arm64_gen_ldr_imm(char type, arm64_ldr_str_type instType, arm64_register destinationReg, arm64_register addrReg, optional_uint64_t optImm, uint32_t *bytesOut, uint32_t *maskOut);

@@ -3,13 +3,11 @@
 
 #include "dyld_cache_format.h"
 #include <uuid/uuid.h>
-#include "CSBlob.h"
 #include "CachePatching.h"
 #include <stddef.h>
 #include <stdbool.h>
 typedef struct MachO MachO;
 typedef struct Fat Fat;
-typedef struct __SuperBlob CS_SuperBlob;
 
 typedef struct DyldSharedCacheFile {
 	char *filepath;
@@ -93,9 +91,6 @@ void dsc_enumerate_mappings(DyldSharedCache *sharedCache, void (^enumeratorBlock
 DyldSharedCacheMapping *dsc_lookup_mapping(DyldSharedCache *sharedCache, uint64_t vmaddr, uint64_t size);
 void *dsc_find_buffer(DyldSharedCache *sharedCache, uint64_t vmaddr, uint64_t size);
 
-int dsc_file_read_at_offset(DyldSharedCacheFile *dscFile, uint64_t offset, size_t size, void *outBuf);
-int dsc_file_replace_code_signature(DyldSharedCacheFile *dscFile, CS_SuperBlob *superblob);
-int dsc_file_write_at_offset(DyldSharedCacheFile *dscFile, uint64_t offset, size_t size, const void *inBuf);
 int dsc_read_from_vmaddr(DyldSharedCache *sharedCache, uint64_t vmaddr, size_t size, void *outBuf);
 int dsc_read_string_from_vmaddr(DyldSharedCache *sharedCache, uint64_t vmaddr, char **outString);
 uint64_t dsc_fileoff_to_vmaddr(DyldSharedCache *sharedCache, DyldSharedCacheFile *file, uint64_t fileoff);
@@ -117,7 +112,5 @@ int dsc_image_enumerate_chained_fixups(DyldSharedCache *sharedCache, DyldSharedC
 uint64_t dsc_get_base_address(DyldSharedCache *sharedCache);
 
 void dsc_free(DyldSharedCache *sharedCache);
-
-int update_dsc_file_for_coretrust_bypass(DyldSharedCacheFile *dscFile, CS_SuperBlob *superblob, uint64_t originalCodeSignatureSize);
 
 #endif

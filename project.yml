@@ -12,40 +12,22 @@ targets:
     type: application
     platform: iOS
     sources:
+      - App
+      - Coordinator
       - Core
-      - Services
-      - UI
-      - path: Vendored/kexploit
-      - path: Vendored/kexploit/pe
-      - path: Vendored/kexploit/TaskRop
+      - path: Vendored/darksword
+      - path: Vendored/pe
+      - path: Vendored/TaskRop
       - path: Vendored/ChOma
       - path: "."
         includes:
           - "*.swift"
         excludes:
-          - "Package.swift"
+          - "project.yml"
         type: group
         createIntermediateGroups: false
     info:
       path: Info.plist
-      properties:
-        UTExportedTypeDeclarations:
-          - UTTypeIdentifier: com.trollstore.ipa
-            UTTypeConformsTo:
-              - public.data
-              - com.pkware.zip-archive
-            UTTypeDescription: IPA Archive
-            UTTypeTagSpecification:
-              public.filename-extension:
-                - ipa
-              public.mime-type:
-                - application/octet-stream
-        CFBundleDocumentTypes:
-          - CFBundleTypeName: IPA Archive
-            LSHandlerRank: Owner
-            LSItemContentTypes:
-              - com.trollstore.ipa
-        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.trollstoreclone
@@ -63,11 +45,12 @@ targets:
         GCC_OPTIMIZATION_LEVEL: 0
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
         HEADER_SEARCH_PATHS:
-          - "$(SRCROOT)/Vendored/kexploit"
-          - "$(SRCROOT)/Vendored/kexploit/pe"
-          - "$(SRCROOT)/Vendored/kexploit/TaskRop"
+          - "$(SRCROOT)/Vendored/darksword"
+          - "$(SRCROOT)/Vendored/pe"
+          - "$(SRCROOT)/Vendored/TaskRop"
           - "$(SRCROOT)/Vendored/lib"
           - "$(SRCROOT)/Vendored/ChOma"
+          - "$(SRCROOT)/Vendored"
         OTHER_LDFLAGS:
           - "-L$(SRCROOT)/Vendored/lib"
           - "-lxpf"

@@ -154,6 +154,7 @@ uint64_t pfsec_arm64_resolve_stub(PFSection *section, uint64_t stubAddr)
 	// First, check if what we have actually is a stub
 	uint32_t inst[3];
 	pfsec_read_at_address(section, stubAddr, inst, sizeof(inst));
+	uint32_t inst_3 = pfsec_read32(section, stubAddr + 12);
 
 	uint32_t stubInst[3], stubMask[3];
 	arm64_gen_adr_p(OPT_BOOL(true), OPT_UINT64_NONE, OPT_UINT64_NONE, ARM64_REG_X(16), &stubInst[0], &stubMask[0]);
@@ -161,9 +162,25 @@ uint64_t pfsec_arm64_resolve_stub(PFSection *section, uint64_t stubAddr)
 	stubInst[2] = 0xd61f0200;
 	stubMask[2] = 0xffffffff;
 
-	if ((inst[0] & stubMask[0]) == stubInst[0] ||
-		(inst[1] & stubMask[1]) == stubInst[1] ||
-		(inst[2] & stubMask[2]) == stubInst[2]) {
+	// Auth stub:
+	// adrp x17, ?
+	// add x17, x17, ?
+	// ldr x16, [x17]
+	// braa x16, x17
+	uint32_t authStubInst[4], authStubMask[4];
+	arm64_gen_adr_p(OPT_BOOL(true), OPT_UINT64_NONE, OPT_UINT64_NONE, ARM64_REG_X(17), &authStubInst[0], &authStubMask[0]);
+	arm64_gen_add_imm(ARM64_REG_X(17), ARM64_REG_X(17), OPT_UINT64_NONE, &authStubInst[1], &authStubMask[1]);
+	arm64_gen_ldr_imm(0, LDR_STR_TYPE_UNSIGNED, ARM64_REG_X(16), ARM64_REG_X(17), OPT_UINT64(0), &authStubInst[2], &authStubMask[2]);
+	authStubInst[3] = 0xd71f0a11;
+	authStubMask[3] = 0xffffffff;
+
+	if (((inst[0] & stubMask[0])     == stubInst[0] &&
+		(inst[1]  & stubMask[1])     == stubInst[1] &&
+		(inst[2]  & stubMask[2])     == stubInst[2]) ||
+		((inst[0] & authStubMask[0]) == authStubInst[0] &&
+		(inst[1]  & authStubMask[1]) == authStubInst[1] &&
+		(inst[2]  & authStubMask[2]) == authStubInst[2] &&
+		(inst_3   & authStubMask[3]) == authStubInst[3])) {
 		// This is a stub, resolve it
 		uint64_t ptrAddr = pfsec_arm64_resolve_adrp_ldr_str_add_reference(section, stubAddr, stubAddr + 4);
 		if (ptrAddr) {
@@ -178,6 +195,10 @@ uint64_t pfsec_arm64_resolve_stub(PFSection *section, uint64_t stubAddr)
 				if (sharedCache) {
 					dsc_read_from_vmaddr(sharedCache, ptrAddr, sizeof(targetAddr), &targetAddr);
 				}
+			}
+
+			if (section->pointerDecoder) {
+				targetAddr = section->pointerDecoder(section, ptrAddr, targetAddr);
 			}
 
 			return targetAddr;

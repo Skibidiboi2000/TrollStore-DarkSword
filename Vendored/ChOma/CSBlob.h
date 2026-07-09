@@ -10,9 +10,6 @@
 #include "MachO.h"
 #include "MemoryStream.h"
 
-typedef struct DyldSharedCache DyldSharedCache;
-typedef struct DyldSharedCacheFile DyldSharedCacheFile;
-
 // Blob index
 typedef struct __BlobIndex {
     uint32_t type;
@@ -87,10 +84,8 @@ const char *cs_slot_type_to_string(uint32_t slotType);
 // Extract Code Signature to file
 int macho_extract_cs_to_file(MachO *macho, CS_SuperBlob *superblob);
 
-int dsc_file_find_code_signature_bounds(DyldSharedCacheFile *dscFile, uint32_t *offsetOut, uint32_t *sizeOut);
 int macho_find_code_signature_bounds(MachO *macho, uint32_t *offsetOut, uint32_t *sizeOut);
 
-CS_SuperBlob *dsc_file_read_code_signature(DyldSharedCacheFile *dscFile);
 CS_SuperBlob *macho_read_code_signature(MachO *macho);
 
 int macho_replace_code_signature(MachO *macho, CS_SuperBlob *superblob);

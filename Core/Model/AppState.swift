@@ -1,8 +1,12 @@
-public enum AppState: Equatable {
-    case sandboxed
-    case obtainingOffsets
+import Foundation
+
+enum AppState: Equatable {
+    case idle
     case exploiting
-    case exploitFailed(String)
-    case patched
-    case panicRecovery
+    case extractingCDHash
+    case injectingTrustCache
+    case installing
+    case refreshingUI
+    case success
+    case error(String)
 }

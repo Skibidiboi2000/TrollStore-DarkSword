@@ -3,27 +3,28 @@
 
 // LARA kernel exploit
 #import "darksword.h"
-#import "offsets.h"
 #import "utils.h"
-#import "compat.h"
-#import "persistence.h"
-
-// LARA post-exploit modules
-#import "vnode.h"
-#import "apfs.h"
-#import "vfs.h"
+#import "offsets.h"
 #import "sbx.h"
-#import "IconServices.h"
-#import "rc.h"
+
+// TaskRop / RemoteCall
 #import "RemoteCall.h"
 
-// Vendored library headers
-#import "xpf.h"
-#import "libgrabkernel2.h"
-
 // ChOma code signing
-#import "choma_helpers.h"
+#import "CSBlob.h"
+#import "CodeDirectory.h"
+#import "MachO.h"
+#import "Fat.h"
 
-// ChOma trust cache injection
+// XPF library
+#import "xpf.h"
+
+// Trust cache scanning (XPF-based)
+#import "choma_helpers.h"
 #import "choma_trustcache.h"
 
+// RemoteCall system() helper
+int rc_run_system(RemoteCall *rc, const char *cmd);
+
+// Swift 6 concurrency-safe offset accessors
+uint32_t get_off_proc_p_flag(void);

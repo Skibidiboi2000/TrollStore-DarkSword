@@ -50,63 +50,14 @@ bool code_directory_calculate_page_hash(CS_CodeDirectory *codeDir, MachO *macho,
         case CS_HASHTYPE_SHA256_256:
         case CS_HASHTYPE_SHA256_160: {
             uint8_t fullHash[CC_SHA256_DIGEST_LENGTH];
-            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
 
         case CS_HASHTYPE_SHA384_384: {
             uint8_t fullHash[CC_SHA384_DIGEST_LENGTH];
-            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
-            memcpy(pageHashOut, fullHash, codeDir->hashSize);
-            break;
-        }
-
-        default: {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool code_directory_calculate_page_hash_dsc(CS_CodeDirectory *codeDir, DyldSharedCacheFile *dscFile, int slot, uint8_t *pageHashOut)
-{
-    uint32_t pageToReadSize = (uint32_t)(pow(2.0, (double)(codeDir->pageSize)));
-    uint32_t pageToReadOffset = slot * pageToReadSize;
-
-    // Special case for reading the code signature itself
-    if (slot == codeDir->nCodeSlots - 1) {
-        uint32_t csOffset = 0, csSize = 0;
-        dsc_file_find_code_signature_bounds(dscFile, &csOffset, &csSize);
-        if (pageToReadOffset > csOffset) return false;
-        // FIXME: dscFile->filesize may be incorrect
-        if (!csOffset || !csSize) pageToReadSize = dscFile->filesize - pageToReadOffset;
-        else pageToReadSize = csOffset - pageToReadOffset;
-    }
-
-    // Bail out when past EOF
-    if ((pageToReadOffset + pageToReadSize) > dscFile->filesize) return false;
-
-    uint8_t page[pageToReadSize];
-    if (dsc_file_read_at_offset(dscFile, pageToReadOffset, pageToReadSize, page) != 0) return false;
-    switch (codeDir->hashType) {
-        case CS_HASHTYPE_SHA160_160: {
-            CC_SHA1(page, (CC_LONG)pageToReadSize, pageHashOut);
-            break;
-        }
-
-        case CS_HASHTYPE_SHA256_256:
-        case CS_HASHTYPE_SHA256_160: {
-            uint8_t fullHash[CC_SHA256_DIGEST_LENGTH];
-            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
-            memcpy(pageHashOut, fullHash, codeDir->hashSize);
-            break;
-        }
-
-        case CS_HASHTYPE_SHA384_384: {
-            uint8_t fullHash[CC_SHA384_DIGEST_LENGTH];
-            CC_SHA384(page, (CC_LONG)pageToReadSize, fullHash);
+            CC_SHA256(page, (CC_LONG)pageToReadSize, fullHash);
             memcpy(pageHashOut, fullHash, codeDir->hashSize);
             break;
         }
@@ -129,7 +80,7 @@ bool csd_code_directory_verify_code_slot(CS_DecodedBlob *codeDirBlob, MachO *mac
     csd_code_directory_read_slot_hash(codeDirBlob, macho, slot, slotHash);
 
     uint8_t pageHash[codeDir.hashSize];
-    if (!code_directory_calculate_page_hash(&codeDir, macho, slot, pageHash)) return false;
+    if (!code_directory_calculate_page_hash(&codeDir, macho, slot, slotHash)) return false;
 
     return (memcmp(slotHash, pageHash, codeDir.hashSize) == 0);
 }
@@ -615,31 +566,6 @@ int csd_code_directory_update_code_slots(CS_DecodedBlob *codeDirBlob, MachO *mac
         // Calculate hash
         uint8_t pageHash[codeDir.hashSize];
         if (!code_directory_calculate_page_hash(&codeDir, macho, slotIdx, pageHash)) {
-            return -1;
-        }
-
-        // Write hash to CodeDirectory
-        uint32_t offsetOfBlobToReplace = codeDir.hashOffset + (slotIdx * codeDir.hashSize);
-        csd_blob_write(codeDirBlob, offsetOfBlobToReplace, codeDir.hashSize, pageHash);
-    }
-
-    return 0;
-}
-
-int csd_code_directory_update_code_slots_dsc(CS_DecodedBlob *codeDirBlob, DyldSharedCacheFile *dscFile)
-{
-    CS_CodeDirectory codeDir;
-    csd_blob_read(codeDirBlob, 0, sizeof(CS_CodeDirectory), &codeDir);
-    CODE_DIRECTORY_APPLY_BYTE_ORDER(&codeDir, BIG_TO_HOST_APPLIER);
-
-    // since this function is only for updating the hashes
-    // we make the assumption here that the nPages of the existing code directory is correct
-    // TODO: maybe check that nCodeSlots lines up with what we expect
-    
-    for (uint32_t slotIdx = 0; slotIdx < codeDir.nCodeSlots; slotIdx++) {
-        // Calculate hash
-        uint8_t pageHash[codeDir.hashSize];
-        if (!code_directory_calculate_page_hash_dsc(&codeDir, dscFile, slotIdx, pageHash)) {
             return -1;
         }
 

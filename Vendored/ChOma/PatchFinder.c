@@ -405,11 +405,11 @@ uint64_t pfsec_find_function_start(PFSection *section, uint64_t midAddr)
     // If there are no function starts, try to find them based on a heuristic approach
     if (cputype == CPU_TYPE_ARM64) {
         if ((cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) {
-            // Find start of function by going back until we find a PACIBSP
+            // Find start of function by going back until we find a "PACIBSP" or a "BTI c"
             uint64_t addr = midAddr;
             while (addr > section->info.vmaddr && addr < (section->info.vmaddr + section->info.size)) {
                 uint32_t curInst = pfsec_read32(section, addr);
-                if (curInst == 0xd503237f) return addr;
+                if (curInst == 0xd503237f || curInst == 0xd503245f) return addr;
                 addr -= 4;
             }
         }
