@@ -896,7 +896,7 @@ static void pe_init(void) {
 }
 
 static void pe_v1(void) {
-    uint64_t n_of_total_search_mapping_pages = 0x1000ULL * 0x10;
+    uint64_t n_of_total_search_mapping_pages = 0x800ULL * 0x10; // 512MB — halved for 3GB device support
     if (is_a18_devices) n_of_total_search_mapping_pages = 0x10ULL * 0x10;
 
     uint64_t search_mapping_size = 0x2000ULL * PAGE_SZ;

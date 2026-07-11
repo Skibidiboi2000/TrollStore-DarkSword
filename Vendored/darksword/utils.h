@@ -20,6 +20,7 @@ extern "C" {
 
 void init_offsets(void);
 uint64_t ourproc(void);
+uint64_t find_self_proc_dynamic(pid_t target_pid);
 uint64_t taskbyproc(uint64_t procaddr);
 uint64_t procbyname(const char *procname);
 uint64_t procbypid(pid_t targetpid);

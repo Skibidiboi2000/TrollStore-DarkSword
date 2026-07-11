@@ -223,7 +223,8 @@ int sbx_escape(uint64_t self_proc) {
     }
 
     if (!self_proc) {
-        sbx_log("ourproc() failed after PID/socket-based self-proc recovery");
+        sbx_log("ourproc() failed — aborting sandbox escape");
+        return -1;
     }
 
     uint64_t ucred = sbx_ucredbyproc(self_proc);

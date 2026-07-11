@@ -643,7 +643,7 @@ void offsets_init(void) {
         off_proc_p_pid = 0x60;
         off_proc_p_fd = isIOS16 ? 0xd8 : 0xd0;
         if (!isIOS16 || SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"16.4")) {
-            off_proc_p_flag = 0x454;
+            off_proc_p_flag = 0x14;
             off_proc_p_textvp = 0x548;
         } else {
             off_proc_p_flag = 0x25c;
@@ -905,7 +905,7 @@ void offsets_init(void) {
         off_proc_p_proc_ro = 0x18;
         off_proc_p_pid = 0x60;
         off_proc_p_fd = 0xd0;
-        off_proc_p_flag = 0x454;
+        off_proc_p_flag = 0x14;
         off_proc_p_textvp = 0x548;
         off_proc_p_name = 0x57d;
         off_proc_ro_pr_task = 0x8;
@@ -1229,7 +1229,7 @@ void offsets_init(void) {
         off_proc_p_proc_ro = 0x18;
         off_proc_p_pid = 0x60;
         off_proc_p_fd = 0xd0;
-        off_proc_p_flag = 0x454;
+        off_proc_p_flag = 0x14;
         off_proc_p_textvp = 0x548;
         off_proc_p_name = 0x57D;
         off_proc_ro_pr_task = 0x8;

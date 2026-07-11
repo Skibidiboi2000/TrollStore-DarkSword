@@ -497,8 +497,49 @@ uint64_t procbypid(pid_t targetpid) {
     return 0;
 }
 
+uint64_t find_self_proc_dynamic(pid_t target_pid) {
+    if (!kernel_base || !ds_is_ready()) return 0;
+    uint64_t scan_start = kernel_base + 0x200000;
+    uint64_t scan_end   = kernel_base + 0x1200000;
+    printf("(utils) dynamic scan: 0x%llx - 0x%llx for PID %d\n", scan_start, scan_end, target_pid);
+
+    for (uint64_t addr = scan_start; addr < scan_end; addr += 8) {
+        uint64_t candidate = ds_kread64(addr);
+        if (!is_kptr(candidate)) continue;
+
+        for (uint32_t pid_off = 0; pid_off < 0x100; pid_off += 4) {
+            uint32_t pid_val = ds_kread32(candidate + pid_off);
+            if (pid_val == 1) {
+                uint64_t next = ds_kread64(candidate);
+                if (!is_kptr(next)) continue;
+                uint64_t cur = candidate;
+                for (int i = 0; i < 4096; i++) {
+                    uint32_t cur_pid = ds_kread32(cur + pid_off);
+                    if (cur_pid == (uint32_t)target_pid) {
+                        printf("(utils) dynamic scan: FOUND PID %d at 0x%llx (pid_off=0x%x)\n",
+                               target_pid, cur, pid_off);
+                        return cur;
+                    }
+                    cur = ds_kread64(cur);
+                    if (!is_kptr(cur)) break;
+                }
+            }
+        }
+    }
+    printf("(utils) dynamic scan: not found\n");
+    return 0;
+}
+
 uint64_t ourproc(void) {
-    uint64_t proc = procbysock_hardcoded();
+    // Dynamic scan first avoids dependency on hardcoded kernproc/allproc symbols
+    uint64_t proc = find_self_proc_dynamic(getpid());
+    if (proc != 0) {
+        printf("(utils) ourproc: dynamic scan succeeded\n");
+        return proc;
+    }
+    printf("(utils) ourproc: dynamic scan failed, trying fallbacks\n");
+
+    proc = procbysock_hardcoded();
     if (proc != 0) {
         return proc;
     }
