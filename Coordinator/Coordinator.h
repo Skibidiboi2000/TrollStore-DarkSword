@@ -16,11 +16,12 @@ extern NSNotificationName const CoordinatorStateChangedNotification;
 @interface Coordinator : NSObject
 @property (nonatomic, assign) AppState state;
 @property (nonatomic, strong) NSString *logMessage;
-@property (nonatomic, strong) NSMutableArray<NSString *> *installedApps;
 
 + (instancetype)shared;
 - (BOOL)isProcessing;
 - (BOOL)isError;
 - (NSString *)stateText;
+- (NSArray<NSString *> *)installedApps;
+- (void)addInstalledApp:(NSString *)appName;
 - (void)startPipelineWithIPAPath:(NSURL *)ipaPath;
 @end

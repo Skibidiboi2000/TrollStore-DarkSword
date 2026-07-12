@@ -4,6 +4,7 @@
 #import "utils.h"
 #import "offsets.h"
 #import "KRWEngine.h"
+#import <UIKit/UIKit.h>
 #import "choma_helpers.h"
 #import "choma_trustcache.h"
 #import "KernelPatcher.h"
@@ -26,6 +27,7 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
 
 @interface Coordinator ()
 @property (nonatomic, strong) dispatch_queue_t pipelineQueue;
+@property (nonatomic, strong) NSMutableArray<NSString *> *installedAppsInternal;
 @end
 
 @implementation Coordinator
@@ -43,7 +45,7 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
     self = [super init];
     if (self) {
         _state = AppStateIdle;
-        _installedApps = [NSMutableArray array];
+        _installedAppsInternal = [NSMutableArray array];
         _pipelineQueue = dispatch_queue_create("com.trollstore.pipeline", DISPATCH_QUEUE_SERIAL);
     }
     return self;
@@ -87,9 +89,22 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
 }
 
 - (void)startPipelineWithIPAPath:(NSURL *)ipaPath {
+    if ([self isProcessing]) {
+        LOG_WARN("Pipeline already running — ignoring duplicate request");
+        return;
+    }
+
     LOG_INFO("Starting pipeline — IPA: %s", ipaPath.lastPathComponent.UTF8String);
 
-    // Initialize kernel offsets BEFORE anything else
+    // Check + init offsets without calling exit() — handle failure gracefully
+    if (!SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"16.0") || SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"26.1")) {
+        LOG_ERROR("Unsupported iOS version — aborting safely");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.logMessage = @"iOS version not supported (require 16.0–26.0)";
+            self.state = AppStateError;
+        });
+        return;
+    }
     offsets_init();
 
     if (!offsetsAreValid()) {
@@ -214,9 +229,7 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
         [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
 
         if (appName) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.installedApps insertObject:appName atIndex:0];
-            });
+            [self addInstalledApp:appName];
         }
 
         // === Step 7: Refresh icons with exact path ===
@@ -231,6 +244,16 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
         }
         LOG_INFO("uicache done — pipeline complete");
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateSuccess; });
+    });
+}
+
+- (NSArray<NSString *> *)installedApps {
+    return [self.installedAppsInternal copy];
+}
+
+- (void)addInstalledApp:(NSString *)appName {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.installedAppsInternal insertObject:appName atIndex:0];
     });
 }
 

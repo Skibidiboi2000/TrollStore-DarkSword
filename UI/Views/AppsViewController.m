@@ -2,7 +2,7 @@
 #import "Coordinator.h"
 
 @interface AppsViewController ()
-@property (nonatomic, strong) NSMutableArray<NSString *> *apps;
+@property (nonatomic, strong) NSArray<NSString *> *apps;
 @end
 
 @implementation AppsViewController

@@ -886,7 +886,9 @@ uint64_t task_self(void) {
 
 int crashproc(const char* name) {
     uint64_t proc = procbyname(name);
+    if (!proc) { printf("(utils) crashproc: process '%s' not found\n", name); return -1; }
     uint64_t task = taskbyproc(proc);
+    if (!task) { printf("(utils) crashproc: task not found for '%s'\n", name); return -1; }
     uint64_t threads = ds_kread64(task + off_task_threads_next);
     uint64_t upcb = ds_kread64(threads + off_thread_machine_upcb);
     uint64_t state = xpaci(upcb) + off_arm_saved_state_uss_ss_64;

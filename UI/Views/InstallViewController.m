@@ -178,8 +178,12 @@
         LOG_INFO("IPA copied to sandbox: %s", localURL.path.UTF8String);
         [[Coordinator shared] startPipelineWithIPAPath:localURL];
     } else {
-        LOG_ERROR("'Copy to sandbox failed: %s — falling back to original URL", copyError.localizedDescription.UTF8String);
-        [[Coordinator shared] startPipelineWithIPAPath:fileURL];
+        LOG_ERROR("Copy to sandbox failed: %s", copyError.localizedDescription.UTF8String);
+        // Cannot use original URL after stopAccessing — fail instead of causing undefined behavior
+        self.statusLabel.text = @"Không thể copy file IPA";
+        [self.spinner stopAnimating];
+        self.selectButton.enabled = YES;
+        self.selectButton.backgroundColor = [UIColor systemBlueColor];
     }
 }
 

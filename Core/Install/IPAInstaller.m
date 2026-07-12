@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <copyfile.h>
 
 @implementation IPAInstaller
 
@@ -28,13 +29,25 @@
     LOG_DEBUG("rename(\"%s\", \"%s\")", src, dst);
     int result = rename(src, dst);
     if (result != 0) {
-        LOG_ERROR("rename failed: %s (errno=%d)", strerror(errno), errno);
-        if (error) *error = [NSError errorWithDomain:@"IPA" code:errno
-            userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"rename failed: %s", strerror(errno)]}];
-        rmdir(destBundle.UTF8String);
-        return NO;
+        if (errno == EXDEV) {
+            LOG_DEBUG("cross-filesystem rename, falling back to copy+remove");
+            if (copyfile(src, dst, NULL, COPYFILE_ALL | COPYFILE_RECURSIVE) != 0) {
+                LOG_ERROR("copyfile failed: %s (errno=%d)", strerror(errno), errno);
+                if (error) *error = [NSError errorWithDomain:@"IPA" code:errno
+                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"copy failed: %s", strerror(errno)]}];
+                rmdir(destBundle.UTF8String);
+                return NO;
+            }
+            // Source will be cleaned up by Coordinator's tmpDir removal
+        } else {
+            LOG_ERROR("rename failed: %s (errno=%d)", strerror(errno), errno);
+            if (error) *error = [NSError errorWithDomain:@"IPA" code:errno
+                userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"rename failed: %s", strerror(errno)]}];
+            rmdir(destBundle.UTF8String);
+            return NO;
+        }
     }
-    LOG_INFO("Atomic rename succeeded: %s -> %s", src, dst);
+    LOG_INFO("Install succeeded: %s -> %s", src, dst);
 
     if (outPath) *outPath = destPath;
     return YES;

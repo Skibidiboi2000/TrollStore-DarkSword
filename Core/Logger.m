@@ -6,11 +6,10 @@
 
 static FILE *logFile = NULL;
 static pthread_mutex_t logMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_once_t logOnce = PTHREAD_ONCE_INIT;
 static NSDateFormatter *logFormatter = nil;
 
-void log_init(void) {
-    if (logFile != NULL) return;
-
+static void log_init_once(void) {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *docsDir = paths.firstObject;
 
@@ -34,8 +33,12 @@ void log_init(void) {
     [logFormatter setDateFormat:@"HH:mm:ss.SSS"];
 }
 
+void log_init(void) {
+    pthread_once(&logOnce, log_init_once);
+}
+
 void log_write(const char *level, const char *file, int line, const char *format, ...) {
-    if (!logFile) log_init();
+    pthread_once(&logOnce, log_init_once);
     if (!logFile) return;
 
     pthread_mutex_lock(&logMutex);

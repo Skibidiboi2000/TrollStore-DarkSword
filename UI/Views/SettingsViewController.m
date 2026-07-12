@@ -80,7 +80,10 @@
     } else if (indexPath.section == 2) {
         cell.textLabel.text = @"Trạng thái Kernel";
         Coordinator *c = [Coordinator shared];
-        if (c.state == AppStateIdle) {
+        if (c.state == AppStateError) {
+            cell.detailTextLabel.text = @"Lỗi";
+            cell.detailTextLabel.textColor = [UIColor systemRedColor];
+        } else if (c.state == AppStateIdle) {
             cell.detailTextLabel.text = @"Chưa kích hoạt";
             cell.detailTextLabel.textColor = [UIColor systemRedColor];
         } else {

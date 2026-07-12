@@ -20,6 +20,7 @@ typedef void (*ds_progress_callback_t)(double progress);
 
 void ds_set_log_callback(ds_log_callback_t callback);
 void ds_set_progress_callback(ds_progress_callback_t callback);
+void ds_reset_progress(void);
 int ds_run(void);
 bool ds_is_ready(void);
 bool ds_isvalid(uint64_t addr);

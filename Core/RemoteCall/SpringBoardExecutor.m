@@ -15,7 +15,9 @@
     }
     LOG_DEBUG("RemoteCall created, running uicache for: %s", appBundlePath.UTF8String);
 
-    NSString *cmd = [NSString stringWithFormat:@"/usr/bin/uicache -p '%@'", appBundlePath];
+    // Escape single quotes to prevent shell injection from malicious filename
+    NSString *escapedPath = [appBundlePath stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
+    NSString *cmd = [NSString stringWithFormat:@"/usr/bin/uicache -p '%@'", escapedPath];
     int result = rc_run_system(rc, cmd.UTF8String);
     if (result != 0) {
         LOG_ERROR("uicache returned %d", result);
