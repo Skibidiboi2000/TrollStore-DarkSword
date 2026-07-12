@@ -31,6 +31,7 @@ static NSString *const kmacprocenforcekey = @"lara.mac_proc_enforce_off";
 uint32_t off_inpcb_inp_list_le_next = 0;
 uint32_t off_inpcb_inp_pcbinfo = 0;
 uint32_t off_inpcb_inp_socket = 0;
+uint32_t off_inpcb_inp_gencnt = 0;
 uint32_t off_inpcb_inp_depend6_inp6_icmp6filt = 0;
 uint32_t off_inpcb_inp_depend6_inp6_chksum = 0;
 uint32_t off_inpcbinfo_ipi_zone = 0;
@@ -132,6 +133,7 @@ static off32entry const koff32entries[] = {
     OFFSET32(off_inpcb_inp_list_le_next),
     OFFSET32(off_inpcb_inp_pcbinfo),
     OFFSET32(off_inpcb_inp_socket),
+    OFFSET32(off_inpcb_inp_gencnt),
     OFFSET32(off_inpcb_inp_depend6_inp6_icmp6filt),
     OFFSET32(off_inpcb_inp_depend6_inp6_chksum),
     OFFSET32(off_inpcbinfo_ipi_zone),
@@ -609,6 +611,7 @@ void offsets_init(void) {
         off_inpcb_inp_socket = 0x40;
         off_inpcb_inp_depend6_inp6_icmp6filt = 0x150;
         off_inpcb_inp_depend6_inp6_chksum = 0x158;
+        off_inpcb_inp_gencnt = 0x78;
         off_inpcbinfo_ipi_zone = 0x68;
         off_socket_so_usecount = 0x22c;
         off_socket_so_proto = 0x18;
@@ -769,6 +772,7 @@ void offsets_init(void) {
     if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"17.1")) {
         off_inpcb_inp_depend6_inp6_icmp6filt = 0x148;
         off_inpcb_inp_depend6_inp6_chksum = 0x150;
+        off_inpcb_inp_gencnt = 0x78;
         off_socket_so_usecount = 0x24c;
         off_socket_so_background_thread = 0x2a8;
         off_thread_t_tro = 0x368;
@@ -881,6 +885,7 @@ void offsets_init(void) {
         off_inpcb_inp_socket = 0x40;
         off_inpcb_inp_depend6_inp6_icmp6filt = 0x148;
         off_inpcb_inp_depend6_inp6_chksum = 0x150;
+        off_inpcb_inp_gencnt = 0x78;
         off_inpcbinfo_ipi_zone = 0x68;
         off_socket_so_usecount = 0x254;
         off_socket_so_proto = 0x20;
@@ -1202,6 +1207,7 @@ void offsets_init(void) {
         off_inpcb_inp_socket = 0x40;
         off_inpcb_inp_depend6_inp6_icmp6filt = 0x148;
         off_inpcb_inp_depend6_inp6_chksum = 0x150;
+        off_inpcb_inp_gencnt = 0x78;
         off_inpcbinfo_ipi_zone = 0x68;
         off_socket_so_usecount = 0x23c;
         off_socket_so_proto = 0x20;

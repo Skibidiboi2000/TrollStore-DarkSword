@@ -41,56 +41,34 @@ static const NSUInteger CHUNK_SIZE = 4 * 1024 * 1024; // 4MB streaming chunks
 
 @implementation IPAParser
 
-+ (NSData *)extractCDHashFromIPAAt:(NSURL *)ipaPath error:(NSError **)error {
-    NSURL *tmpDir = [NSURL fileURLWithPath:NSTemporaryDirectory()];
-    tmpDir = [tmpDir URLByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
-    [[NSFileManager defaultManager] createDirectoryAtURL:tmpDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    if (![self unzipIPAAt:ipaPath to:tmpDir error:error]) {
-        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
-        return nil;
-    }
-
-    NSURL *payloadDir = [tmpDir URLByAppendingPathComponent:@"Payload"];
-    NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:payloadDir.path error:nil];
-    NSString *appDir = nil;
-    for (NSString *name in contents) {
-        if ([name hasSuffix:@".app"]) { appDir = name; break; }
-    }
-    if (!appDir) {
-        if (error) *error = [NSError errorWithDomain:@"IPA" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Missing .app in Payload"}];
-        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
-        return nil;
-    }
-
-    NSURL *appPath = [payloadDir URLByAppendingPathComponent:appDir];
-    NSURL *infoPlistURL = [appPath URLByAppendingPathComponent:@"Info.plist"];
++ (NSData *)extractCDHashFromAppBundle:(NSURL *)appBundlePath error:(NSError **)error {
+    NSURL *infoPlistURL = [appBundlePath URLByAppendingPathComponent:@"Info.plist"];
     NSData *infoData = [NSData dataWithContentsOfURL:infoPlistURL];
     if (!infoData) {
         if (error) *error = [NSError errorWithDomain:@"IPA" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Missing Info.plist"}];
-        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
         return nil;
     }
     NSDictionary *info = [NSPropertyListSerialization propertyListWithData:infoData options:0 format:nil error:error];
-    if (!info) {
-        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
-        return nil;
-    }
+    if (!info) return nil;
+
     NSString *execName = info[@"CFBundleExecutable"];
     if (!execName) {
         if (error) *error = [NSError errorWithDomain:@"IPA" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No CFBundleExecutable"}];
-        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
         return nil;
     }
 
-    NSString *execPath = [[appPath URLByAppendingPathComponent:execName] path];
-    NSData *cdhash = [ChoMAWrapper extractCDHash:execPath];
-    [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+    NSString *execPath = [[appBundlePath URLByAppendingPathComponent:execName] path];
+    return [ChoMAWrapper extractCDHash:execPath];
+}
 
-    if (!cdhash) {
-        if (error) *error = [NSError errorWithDomain:@"IPA" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"CDHash extraction failed"}];
++ (NSURL *)findAppBundleInPayload:(NSURL *)payloadDir {
+    NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:payloadDir.path error:nil];
+    for (NSString *name in contents) {
+        if ([name hasSuffix:@".app"]) {
+            return [payloadDir URLByAppendingPathComponent:name];
+        }
     }
-    return cdhash;
+    return nil;
 }
 
 + (BOOL)unzipIPAAt:(NSURL *)source to:(NSURL *)dest error:(NSError **)error {

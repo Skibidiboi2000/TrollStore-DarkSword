@@ -19,12 +19,15 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Cài đặt";
-    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"cell"];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
         name:CoordinatorStateChangedNotification object:nil];
 
     self.persistenceSwitch = [[UISwitch alloc] init];
     self.persistenceSwitch.on = YES;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -57,7 +60,10 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+    }
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
     if (indexPath.section == 0) {

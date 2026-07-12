@@ -40,6 +40,10 @@
     uint32_t count = ds_kread32(tcAddr + 20);
     LOG_DEBUG("'TC version=%u, current entries=%u", version, count);
 
+    // Sanity: count's byte span must fit in declared data section
+    uint64_t cdhashArray = tcAddr + 24;
+    uint64_t entriesByteSpan = (uint64_t)count * 20;
+
     uint64_t amfiDataSize = 0;
     uint64_t amfiDataStart = choma_get_amfi_data_range(&amfiDataSize);
     if (amfiDataStart == 0 || amfiDataSize == 0) {
@@ -50,8 +54,14 @@
     uint64_t dataEnd = amfiDataStart + kernelSlide + amfiDataSize;
     LOG_DEBUG("'AMFI data: start=0x%llx size=%llu end=0x%llx", amfiDataStart, amfiDataSize, dataEnd);
 
-    uint64_t cdhashArray = tcAddr + 24;
-    uint64_t newEntryOff = cdhashArray + (uint64_t)count * 20;
+    // Prevent runaway iterations if count is corrupted
+    if (cdhashArray + entriesByteSpan > dataEnd || entriesByteSpan / 20 != count) {
+        LOG_ERROR("'Trust cache entry count %u overflows data section — refusing injection", count);
+        if (error) *error = [NSError errorWithDomain:@"TC" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Trust cache entry count corrupt"}];
+        return NO;
+    }
+
+    uint64_t newEntryOff = cdhashArray + entriesByteSpan;
     LOG_DEBUG("'New entry would be at 0x%llx (data ends at 0x%llx)", newEntryOff, dataEnd);
 
     if (newEntryOff + 20 > dataEnd) {

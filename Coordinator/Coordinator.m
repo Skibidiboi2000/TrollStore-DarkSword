@@ -90,7 +90,6 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
     LOG_INFO("Starting pipeline — IPA: %s", ipaPath.lastPathComponent.UTF8String);
 
     // Initialize kernel offsets BEFORE anything else
-    // offsets_init() sets hardcoded values for iOS 16.0-26.0 per SoC family
     offsets_init();
 
     if (!offsetsAreValid()) {
@@ -105,96 +104,129 @@ NSNotificationName const CoordinatorStateChangedNotification = @"CoordinatorStat
              off_inpcb_inp_depend6_inp6_icmp6filt, off_socket_so_usecount,
              off_socket_so_proto, off_protosw_pr_input, off_proc_p_flag);
 
-    // Initialize fallback proc-search offsets (utils.m) if available
 #ifndef __clang_analyzer__
     init_offsets();
 #endif
 
     dispatch_async(self.pipelineQueue, ^{
+        // === Step 0: Extract IPA once ===
+        NSURL *tmpDir = [NSURL fileURLWithPath:NSTemporaryDirectory()];
+        tmpDir = [tmpDir URLByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
+        [[NSFileManager defaultManager] createDirectoryAtURL:tmpDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        NSError *extractError = nil;
+        if (![IPAParser unzipIPAAt:ipaPath to:tmpDir error:&extractError]) {
+            LOG_ERROR("Unzip failed: %s", extractError.localizedDescription.UTF8String);
+            [self failWithMessage:@"Giải nén IPA thất bại"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            return;
+        }
+        LOG_INFO("IPA extracted to: %s", tmpDir.path.UTF8String);
+
+        NSURL *payloadDir = [tmpDir URLByAppendingPathComponent:@"Payload"];
+        NSURL *appBundle = [IPAParser findAppBundleInPayload:payloadDir];
+        if (!appBundle) {
+            LOG_ERROR("No .app bundle in Payload");
+            [self failWithMessage:@"Không tìm thấy .app trong IPA"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            return;
+        }
+        LOG_INFO("Found app bundle: %s", appBundle.lastPathComponent.UTF8String);
+        NSString *appName = appBundle.lastPathComponent;
+
+        // === Step 1: Exploit ===
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateExploiting; });
 
-        // 1. Exploit
         LOG_DEBUG("Running ds_run()...");
         if (ds_run() != 0) {
             LOG_ERROR("ds_run failed");
-            [self failWithMessage:@"Exploit failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:@"Kernel exploit thất bại"];
             return;
         }
         LOG_INFO("Kernel exploit succeeded — KRW established");
 
-        // 2. Sandbox Escape
+        // === Step 2: Sandbox Escape ===
         LOG_DEBUG("Getting proc_self...");
         uint64_t selfProc = proc_self();
         LOG_DEBUG("proc_self = 0x%llx", selfProc);
         if (sbx_escape(selfProc) != 0) {
             LOG_ERROR("sbx_escape failed");
-            [self failWithMessage:@"Sandbox escape failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:@"Sandbox escape thất bại"];
             return;
         }
         LOG_INFO("Sandbox escaped");
 
-        // 3. P_PLATFORM
+        // === Step 3: P_PLATFORM ===
         LOG_DEBUG("Setting P_PLATFORM...");
         NSError *ppError = nil;
         if (![KernelPatcher setPlatformBinaryWithError:&ppError]) {
             LOG_ERROR("P_PLATFORM failed: %s", ppError.localizedDescription.UTF8String);
-            [self failWithMessage:ppError.localizedDescription ?: @"P_PLATFORM failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:ppError.localizedDescription ?: @"P_PLATFORM thất bại"];
             return;
         }
         LOG_INFO("P_PLATFORM set on self proc");
 
+        // === Step 4: Extract CDHash ===
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateExtractingCDHash; });
 
-        // 4. Extract CDHash
-        LOG_DEBUG("Extracting CDHash from IPA...");
+        LOG_DEBUG("Extracting CDHash from app bundle...");
         NSError *parseError = nil;
-        NSData *cdhash = [IPAParser extractCDHashFromIPAAt:ipaPath error:&parseError];
+        NSData *cdhash = [IPAParser extractCDHashFromAppBundle:appBundle error:&parseError];
         if (!cdhash) {
             LOG_ERROR("CDHash extraction failed: %s", parseError.localizedDescription.UTF8String);
-            [self failWithMessage:parseError.localizedDescription ?: @"CDHash extraction failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:parseError.localizedDescription ?: @"CDHash extraction thất bại"];
             return;
         }
         LOG_INFO("CDHash extracted (%d bytes)", (int)cdhash.length);
 
+        // === Step 5: Inject Trust Cache ===
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateInjectingTrustCache; });
 
-        // 5. Inject Trust Cache — makes CDHash trusted by kernel so IPA runs as system app
         LOG_DEBUG("Injecting CDHash into kernel trust cache...");
         NSError *tcError = nil;
         if (![TrustCacheManager injectTrustCacheWithCdhash:cdhash error:&tcError]) {
             LOG_ERROR("Trust cache injection failed: %s", tcError.localizedDescription.UTF8String);
-            [self failWithMessage:tcError.localizedDescription ?: @"Trust cache injection failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:tcError.localizedDescription ?: @"Trust cache injection thất bại"];
             return;
         }
         LOG_INFO("Trust cache injection done");
 
+        // === Step 6: Install IPA ===
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateInstalling; });
 
-        // 6. Install IPA
-        LOG_DEBUG("Installing IPA via rename...");
+        LOG_DEBUG("Installing app bundle...");
+        NSString *installedPath = nil;
         NSError *installError = nil;
-        if (![IPAInstaller installIPAPath:ipaPath error:&installError]) {
+        if (![IPAInstaller installAppBundle:appBundle installedPath:&installedPath error:&installError]) {
             LOG_ERROR("Install failed: %s", installError.localizedDescription.UTF8String);
-            [self failWithMessage:installError.localizedDescription ?: @"Install failed"];
+            [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+            [self failWithMessage:installError.localizedDescription ?: @"Cài đặt thất bại"];
             return;
         }
-        LOG_INFO("IPA installed successfully");
+        LOG_INFO("App installed to: %s", installedPath.UTF8String);
 
-        NSString *appName = [[ipaPath lastPathComponent] stringByDeletingPathExtension];
-        if (appName.length > 0) {
+        // Clean up extraction temp — app bundle already renamed to system container
+        [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
+
+        if (appName) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.installedApps insertObject:appName atIndex:0];
             });
         }
 
+        // === Step 7: Refresh icons with exact path ===
         dispatch_async(dispatch_get_main_queue(), ^{ self.state = AppStateRefreshingUI; });
 
-        // 7. Refresh icons
         LOG_DEBUG("Running uicache via SpringBoard RemoteCall...");
         NSError *sbError = nil;
-        if (![SpringBoardExecutor refreshIconsWithError:&sbError]) {
+        if (![SpringBoardExecutor refreshIconsForInstalledApp:installedPath error:&sbError]) {
             LOG_ERROR("uicache failed: %s", sbError.localizedDescription.UTF8String);
-            [self failWithMessage:sbError.localizedDescription ?: @"UI refresh failed"];
+            [self failWithMessage:sbError.localizedDescription ?: @"Làm mới SpringBoard thất bại"];
             return;
         }
         LOG_INFO("uicache done — pipeline complete");

@@ -21,6 +21,7 @@ extern "C" {
 extern uint32_t off_inpcb_inp_list_le_next;
 extern uint32_t off_inpcb_inp_pcbinfo;
 extern uint32_t off_inpcb_inp_socket;
+extern uint32_t off_inpcb_inp_gencnt;
 extern uint32_t off_inpcbinfo_ipi_zone;
 extern uint32_t off_inpcb_inp_depend6_inp6_icmp6filt;
 extern uint32_t off_inpcb_inp_depend6_inp6_chksum;

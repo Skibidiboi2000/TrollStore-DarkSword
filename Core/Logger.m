@@ -6,6 +6,7 @@
 
 static FILE *logFile = NULL;
 static pthread_mutex_t logMutex = PTHREAD_MUTEX_INITIALIZER;
+static NSDateFormatter *logFormatter = nil;
 
 void log_init(void) {
     if (logFile != NULL) return;
@@ -28,6 +29,9 @@ void log_init(void) {
         fprintf(logFile, "===============================\n");
         fflush(logFile);
     }
+
+    logFormatter = [[NSDateFormatter alloc] init];
+    [logFormatter setDateFormat:@"HH:mm:ss.SSS"];
 }
 
 void log_write(const char *level, const char *file, int line, const char *format, ...) {
@@ -36,10 +40,7 @@ void log_write(const char *level, const char *file, int line, const char *format
 
     pthread_mutex_lock(&logMutex);
 
-    NSDate *now = [NSDate date];
-    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-    [formatter setDateFormat:@"HH:mm:ss.SSS"];
-    NSString *timeString = [formatter stringFromDate:now];
+    NSString *timeString = [logFormatter stringFromDate:[NSDate date]];
 
     const char *filename = strrchr(file, '/');
     if (filename) filename++; else filename = file;
